@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox='0 0 1 1'%3E%3C%2Fsvg%3E"
+    />
+    <title>Fresh Clean Threads Runner</title>
+    <script src="mraid.js"></script>
+    <script>
+      (function () {
+        let mraidIsReady = false;
+        let mraidReadyListenerAttached = false;
+        let creativeInitialized = false;
+        let resolveCreativeBoot;
+
+        window.__creativeBootPromise = new Promise(function (resolve) {
+          resolveCreativeBoot = resolve;
+        });
+
+        function trackMraidReadiness(mraid) {
+          if (
+            mraidReadyListenerAttached ||
+            !mraid ||
+            typeof mraid.addEventListener !== "function"
+          ) {
+            return;
+          }
+
+          try {
+            mraid.addEventListener("ready", function () {
+              mraidIsReady = true;
+            });
+            mraidReadyListenerAttached = true;
+          } catch (error) {
+            // getState() remains the primary readiness check.
+          }
+        }
+
+        window.trackMraidReadiness = trackMraidReadiness;
+
+        window.isMraidUsable = function isMraidUsable(mraid) {
+          if (!mraid) return false;
+          trackMraidReadiness(mraid);
+          if (typeof mraid.getState !== "function") return true;
+
+          try {
+            const state = mraid.getState();
+            return state === "default" || state === "expanded";
+          } catch (error) {
+            return mraidIsReady;
+          }
+        };
+
+        window.handleClickAction = function handleClickAction() {
+          const mraid = window.mraid || {};
+          const clickTarget =
+            window.clickTag ||
+            window.clickTag1 ||
+            window.clickthrough ||
+            window.clickThrough ||
+            "";
+
+          if (
+            typeof mraid.open === "function" &&
+            window.isMraidUsable(mraid)
+          ) {
+            try {
+              if (clickTarget) {
+                mraid.open(clickTarget);
+              } else {
+                mraid.open();
+              }
+              return;
+            } catch (error) {
+              return;
+            }
+          }
+        };
+
+        function init() {
+          if (creativeInitialized) return;
+          creativeInitialized = true;
+          resolveCreativeBoot();
+        }
+
+        function resolveMraidGate(startedAt) {
+          if (typeof mraid === "undefined") {
+            if (Date.now() - startedAt < 500) {
+              setTimeout(function () {
+                resolveMraidGate(startedAt);
+              }, 50);
+            } else {
+              init();
+            }
+            return;
+          }
+
+          trackMraidReadiness(mraid);
+          try {
+            if (typeof mraid.getState !== "function") {
+              init();
+            } else {
+              if (mraid.getState() === "loading") {
+                if (typeof mraid.addEventListener === "function") {
+                  mraid.addEventListener("ready", init);
+                }
+                setTimeout(init, 2000);
+              } else {
+                init();
+              }
+            }
+          } catch (error) {
+            setTimeout(init, 2000);
+          }
+        }
+
+        window.gameReady = window.gameReady || function () {};
+        window.gameStart = window.gameStart || function () {};
+        window.gameEnd = window.gameEnd || function () {};
+        window.gameClose = window.gameClose || function () {};
+
+        const value = new URLSearchParams(window.location.search).get("date");
+        let previewDate = null;
+        if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          const parts = value.split("-").map(Number);
+          const candidate = new Date(0);
+          candidate.setFullYear(parts[0], parts[1] - 1, parts[2]);
+          candidate.setHours(12, 0, 0, 0);
+          if (
+            candidate.getFullYear() === parts[0] &&
+            candidate.getMonth() === parts[1] - 1 &&
+            candidate.getDate() === parts[2]
+          ) {
+            previewDate = candidate;
+          }
+        }
+
+        window.getCreativeNow = function () {
+          return previewDate ? new Date(previewDate.getTime()) : new Date();
+        };
+
+        resolveMraidGate(Date.now());
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
