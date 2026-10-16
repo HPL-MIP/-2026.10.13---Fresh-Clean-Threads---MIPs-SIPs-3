@@ -139,9 +139,7 @@ function getObstacleSpawnX(
 ) {
   const viewportRightX =
     (layout.viewW - layout.offsetX) / layout.scale;
-  return layout.viewportOrientation === "landscape"
-    ? viewportRightX - obstacleWidth
-    : layout.logicalW + GAMEPLAY.firstObstacleOffset;
+  return viewportRightX - obstacleWidth / 2;
 }
 
 export function GameScene({
