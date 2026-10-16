@@ -136,10 +136,12 @@ function getCanvasMetrics(layout: ResponsiveState) {
 function getObstacleSpawnX(
   layout: ResponsiveState,
   obstacleWidth: number,
+  leadingWidth = obstacleWidth,
 ) {
   const viewportRightX =
     (layout.viewW - layout.offsetX) / layout.scale;
-  return viewportRightX - obstacleWidth / 2;
+  const leadingOverhang = Math.max(0, (leadingWidth - obstacleWidth) / 2);
+  return viewportRightX + leadingOverhang;
 }
 
 export function GameScene({
@@ -612,7 +614,20 @@ export function GameScene({
               ? GAMEPLAY.landscapeObstacleHeightMultiplier
               : 1);
           const obstacleHeight = OBSTACLE_HEIGHTS[imageIndex] * heightScale;
-          const obstacleX = getObstacleSpawnX(current, obstacleWidth);
+
+          world.obstaclesUntilShirt -= 1;
+          const shouldSpawnShirt =
+            world.obstaclesUntilShirt <= 0 && world.shirtQueue.length > 0;
+          const shirtIndex = shouldSpawnShirt
+            ? world.shirtQueue.shift()
+            : undefined;
+          const onObstacle =
+            typeof shirtIndex === "number" && Math.random() > 0.42;
+          const obstacleX = getObstacleSpawnX(
+            current,
+            obstacleWidth,
+            onObstacle ? shirtWidth : obstacleWidth,
+          );
           world.obstacles.push({
             x: obstacleX,
             width: obstacleWidth,
@@ -620,23 +635,18 @@ export function GameScene({
             imageIndex,
           });
 
-          world.obstaclesUntilShirt -= 1;
-          if (world.obstaclesUntilShirt <= 0 && world.shirtQueue.length) {
-            const shirtIndex = world.shirtQueue.shift();
-            if (typeof shirtIndex === "number") {
-              const onObstacle = Math.random() > 0.42;
-              world.collectibles.push({
-                shirtIndex,
-                x: onObstacle
-                  ? obstacleX + obstacleWidth / 2 - shirtWidth / 2
-                  : obstacleX + 300,
-                y: onObstacle
-                  ? floor - obstacleHeight - shirtHeight - 34
-                  : floor - shirtHeight - 44,
-                width: shirtWidth,
-                height: shirtHeight,
-              });
-            }
+          if (typeof shirtIndex === "number") {
+            world.collectibles.push({
+              shirtIndex,
+              x: onObstacle
+                ? obstacleX + obstacleWidth / 2 - shirtWidth / 2
+                : obstacleX + 300,
+              y: onObstacle
+                ? floor - obstacleHeight - shirtHeight - 34
+                : floor - shirtHeight - 44,
+              width: shirtWidth,
+              height: shirtHeight,
+            });
             world.obstaclesUntilShirt = randomShirtObstacleInterval();
           }
 
