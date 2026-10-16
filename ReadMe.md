@@ -25,7 +25,7 @@ Product Scene;
 - This will be a overlay scene, our main background is the gamescene, then the bg for product scene will be a panel color #696969 and 80% opacity.
 - in front of that panel, will be the CONGRATULATIONS!.webp, product.webp, Fall Essentials Crew 6Pack.webp then CTA at the bottom
 
-Encard
+Encard 
 - just use temporary_endcard.html
 
 
