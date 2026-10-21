@@ -127,6 +127,7 @@ export default function App() {
     "--panel-top": `${roadTop + roadHeight - panelOverlap}px`,
     "--product-background-blur": `${PRODUCT_EFFECTS.backgroundBlurPx}px`,
     "--product-background-inset": `${-PRODUCT_EFFECTS.backgroundBlurPx * 2}px`,
+    "--product-background-bleed": `${PRODUCT_EFFECTS.backgroundBlurPx * 4}px`,
     "--product-stage-blur": `${PRODUCT_EFFECTS.backgroundBlurPx / layout.scale}px`,
     "--product-overlay-opacity": PRODUCT_EFFECTS.overlayOpacity,
     "--z-background": Z_INDEX.background,

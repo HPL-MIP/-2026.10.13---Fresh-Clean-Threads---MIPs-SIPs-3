@@ -144,8 +144,10 @@ canvas {
 
 .app--product > .viewport-background {
   inset: var(--product-background-inset, -14px);
-  width: auto;
-  height: auto;
+  width: calc(100% + var(--product-background-bleed, 28px));
+  height: calc(100% + var(--product-background-bleed, 28px));
+  opacity: 1;
+  visibility: visible;
   filter: blur(var(--product-background-blur, 7px));
 }
 

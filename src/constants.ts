@@ -53,6 +53,10 @@ export const GAMEPLAY = {
   manholeWidthLandscape: 265,
   productWidthPortrait: 145,
   productWidthLandscape: 122,
+  // Raises only products mounted above cone/manhole obstacles.
+  productObstacleLiftPortrait: 200,
+  productObstacleLiftLandscape: 200,
+  // Keeps standalone products at their existing height.
   productLiftPortrait: 90,
   productLiftLandscape: 70,
   collisionRestartDelayMs: 1250,

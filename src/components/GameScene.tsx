@@ -227,6 +227,10 @@ function addObstacle(world: World, layout: ResponsiveState, obstacleX: number) {
       layout.viewportOrientation === "portrait"
         ? GAMEPLAY.productLiftPortrait
         : GAMEPLAY.productLiftLandscape;
+    const productObstacleLift =
+      layout.viewportOrientation === "portrait"
+        ? GAMEPLAY.productObstacleLiftPortrait
+        : GAMEPLAY.productObstacleLiftLandscape;
     const onObstacle = Math.random() < 0.68;
 
     world.collectibles.push({
@@ -239,7 +243,7 @@ function addObstacle(world: World, layout: ResponsiveState, obstacleX: number) {
           obstacle.height -
           productHeight -
           30 -
-          productLift +
+          productObstacleLift +
           obstacleYShift
         : floor - productHeight - 30 - productLift,
       width: productWidth,
@@ -1023,7 +1027,7 @@ export function GameScene({
     height: `${layout.viewH / layout.scale}px`,
     pointerEvents: interactive ? "auto" : "none",
   } as const;
-  const scoreLabel = `${score} ${score <= 1 ? "Point" : "Points"}`;
+  const scoreLabel = `${score} ${score === 1 ? "Point" : "Points"}`;
 
   return (
     <>
