@@ -20,10 +20,9 @@ import tapToStartText from "../Assets/Histrips Assets/TAP TO START.webp";
 import tryAgainText from "../Assets/Histrips Assets/TRY AGAIN.webp";
 import wheel from "../Assets/Histrips Assets/wheel.webp";
 import bonusChime from "../Assets/sfx/Bonus Chime.mp3";
-import endChime from "../Assets/sfx/end.mp3";
 import failSound from "../Assets/sfx/Fail Sound.mp3";
-import specialChime from "../Assets/sfx/Special Chime Cling.mp3";
 import jumpWoosh from "../Assets/sfx/Woosh 3.mp3";
+import completionTimeline from "./assets/sounds/Bonus Special End Timeline.m4a";
 import rollingBall from "./assets/sounds/RollingBall.optimized.wav";
 
 export const assets = {
@@ -45,8 +44,7 @@ export const assets = {
     jump: jumpWoosh,
     fail: failSound,
     collect: bonusChime,
-    product: specialChime,
-    endcard: endChime,
+    completion: completionTimeline,
   },
   tapBannerBackground,
   tapToStartText,

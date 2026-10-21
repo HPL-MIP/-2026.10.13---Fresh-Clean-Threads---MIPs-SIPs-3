@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 const root = process.cwd();
 const outputPath = resolve(root, "dist/index.html");
 const deliveryName =
-  "histrips_acslanot_mip_20261021_01_ecomm_game_unknown_human_none_none.html";
+  "histrips_acslanot_mip_20261016_03_ecomm_game_unknown_human_none_none.html";
 const deliveryPath = resolve(root, "dist", deliveryName);
 const maxBytes = 5_000_000;
 const suppliedEndcardPath = resolve(
@@ -149,10 +149,9 @@ const binaryAssets = [
   "Assets/Histrips Assets/wheel.webp",
   "Assets/Histrips Assets/YOU’VE GOT!.webp",
   "Assets/sfx/Bonus Chime.mp3",
-  "Assets/sfx/end.mp3",
   "Assets/sfx/Fail Sound.mp3",
-  "Assets/sfx/Special Chime Cling.mp3",
   "Assets/sfx/Woosh 3.mp3",
+  "src/assets/sounds/Bonus Special End Timeline.m4a",
   "src/assets/sounds/RollingBall.optimized.wav",
 ];
 
@@ -161,6 +160,16 @@ for (const asset of binaryAssets) {
   const encoded = assetBytes.toString("base64");
   if (!html.includes(encoded)) {
     fail(`Asset bytes were not embedded exactly: ${asset}`);
+  }
+}
+
+for (const mergedSource of [
+  "Assets/sfx/Special Chime Cling.mp3",
+  "Assets/sfx/end.mp3",
+]) {
+  const encoded = readFileSync(resolve(root, mergedSource)).toString("base64");
+  if (html.includes(encoded)) {
+    fail(`Merged completion source was also embedded separately: ${mergedSource}`);
   }
 }
 

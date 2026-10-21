@@ -64,8 +64,15 @@ export const GAMEPLAY = {
 // These values follow the physical viewport orientation while the game itself
 // remains on its authored portrait stage.
 export const BIKE_POSITION = {
-  portrait: { x: 30, y: 0 },
-  landscape: { x: 0, y: 0 },
+  portrait: { x: 30, y: 10 },
+  landscape: { x: 0, y: 10 },
+} as const;
+
+// Scales the complete bike assembly, including both frames, both wheels,
+// collection effects, and gameplay hitboxes.
+export const BIKE_SCALE = {
+  portrait: 0.9,
+  landscape: 0.9,
 } as const;
 
 // Fine-tunes each animation frame inside the complete bike group.
@@ -121,8 +128,10 @@ export const MANHOLE_POSITION = {
 export const PRODUCT_EFFECTS = {
   backgroundBlurPx: 7,
   overlayOpacity: 0.8,
+  overlayBleedPx: 15,
 } as const;
 
+export const GAME_COMPLETE_HOLD_MS = 1_000;
 export const PRODUCT_SCENE_DURATION_MS = 3_000;
 
 export const LAYOUT = {

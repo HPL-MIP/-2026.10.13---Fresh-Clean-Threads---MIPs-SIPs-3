@@ -4,7 +4,7 @@ import productDescription from "../../Assets/Histrips Assets/Lavender Mouth Tape
 import productLogo from "../../Assets/Histrips Assets/logo_product_scene.webp";
 import productMain from "../../Assets/Histrips Assets/product_main.webp";
 import youveGot from "../../Assets/Histrips Assets/YOU’VE GOT!.webp";
-import { PRODUCT_LAYOUT } from "../constants";
+import { PRODUCT_EFFECTS, PRODUCT_LAYOUT } from "../constants";
 import type { ResponsiveState } from "../hooks/useResponsive";
 
 type ProductSceneProps = {
@@ -28,11 +28,12 @@ export function ProductScene({ layout, onCta }: ProductSceneProps) {
     product: PRODUCT_LAYOUT.product[layout.orientation],
     cta: PRODUCT_LAYOUT.cta[layout.orientation],
   };
+  const overlayBleed = PRODUCT_EFFECTS.overlayBleedPx / layout.scale;
   const overlayStyle = {
-    left: `${-layout.offsetX / layout.scale}px`,
-    top: `${-layout.offsetY / layout.scale}px`,
-    width: `${layout.viewW / layout.scale}px`,
-    height: `${layout.viewH / layout.scale}px`,
+    left: `${-layout.offsetX / layout.scale - overlayBleed}px`,
+    top: `${-layout.offsetY / layout.scale - overlayBleed}px`,
+    width: `${layout.viewW / layout.scale + overlayBleed * 2}px`,
+    height: `${layout.viewH / layout.scale + overlayBleed * 2}px`,
   } satisfies CSSProperties;
 
   return (

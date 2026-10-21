@@ -5,8 +5,7 @@ type CueName =
   | "jump"
   | "fail"
   | "collect"
-  | "product"
-  | "endcard";
+  | "completion";
 type VoicePhase = "idle" | "priming" | "starting" | "playing" | "pending";
 
 type SoundSources = Record<CueName, string>;
@@ -51,8 +50,7 @@ export type PlayableSoundHandle = {
   stopRolling: () => void;
   playFail: () => void;
   playCollect: () => void;
-  playProduct: () => void;
-  playEndcard: () => void;
+  playCompletion: () => void;
 };
 
 const PENDING_FRESHNESS_MS = 5_000;
@@ -67,8 +65,7 @@ const POOL_CONFIG: Record<
   jump: { poolSize: 2, loop: false, volume: 0.2 },
   fail: { poolSize: 1, loop: false, volume: 1 },
   collect: { poolSize: 3, loop: false, volume: 0.95 },
-  product: { poolSize: 1, loop: false, volume: 1 },
-  endcard: { poolSize: 1, loop: false, volume: 1 },
+  completion: { poolSize: 1, loop: false, volume: 1 },
 };
 
 class PlayableAudioManager {
@@ -87,8 +84,7 @@ class PlayableAudioManager {
       jump: this.createPool("jump", sources.jump),
       fail: this.createPool("fail", sources.fail),
       collect: this.createPool("collect", sources.collect),
-      product: this.createPool("product", sources.product),
-      endcard: this.createPool("endcard", sources.endcard),
+      completion: this.createPool("completion", sources.completion),
     };
   }
 
@@ -244,9 +240,7 @@ class PlayableAudioManager {
   }
 
   private primeFutureVoices() {
-    (
-      ["jump", "fail", "collect", "product"] as const
-    ).forEach((name) => {
+    (["rolling", "jump", "fail", "collect", "completion"] as const).forEach((name) => {
       this.pools[name].voices.forEach((voice) =>
         this.primeVoice(this.pools[name], voice),
       );
@@ -510,12 +504,8 @@ class PlayableAudioManager {
     this.requestCue("collect", null);
   }
 
-  playProduct() {
-    this.requestCue("product", null);
-  }
-
-  playEndcard() {
-    this.requestCue("endcard", null);
+  playCompletion() {
+    this.requestCue("completion", null);
   }
 
   setLifecycle(lifecycle: SoundLifecycle) {
@@ -583,10 +573,9 @@ export function useSound(
     };
   }, [
     sources.collect,
-    sources.endcard,
+    sources.completion,
     sources.fail,
     sources.jump,
-    sources.product,
     sources.rolling,
   ]);
 
@@ -608,8 +597,7 @@ export function useSound(
       stopRolling: () => managerRef.current?.stopRolling(),
       playFail: () => managerRef.current?.playFail(),
       playCollect: () => managerRef.current?.playCollect(),
-      playProduct: () => managerRef.current?.playProduct(),
-      playEndcard: () => managerRef.current?.playEndcard(),
+      playCompletion: () => managerRef.current?.playCompletion(),
     }),
     [],
   );

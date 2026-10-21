@@ -6,6 +6,7 @@ import { ProductScene } from "./components/ProductScene";
 import { TemporaryEndcard } from "./components/TemporaryEndcard";
 import {
   BOTTOM_PANEL_OVERLAP,
+  GAME_COMPLETE_HOLD_MS,
   PRODUCT_EFFECTS,
   PRODUCT_SCENE_DURATION_MS,
   ROAD_LAYOUT,
@@ -21,7 +22,7 @@ import {
   useMraidLifecycle,
 } from "./networks";
 
-type Scene = "game" | "product" | "endcard";
+type Scene = "game" | "completion" | "product" | "endcard";
 
 export default function App() {
   const layout = useResponsive();
@@ -33,7 +34,6 @@ export default function App() {
   const [scene, setScene] = useState<Scene>("game");
   const startedRef = useRef(false);
   const completedRef = useRef(false);
-  const productAnnouncedRef = useRef(false);
   const endcardAnnouncedRef = useRef(false);
 
   useEffect(() => {
@@ -56,16 +56,12 @@ export default function App() {
   }, [sounds]);
 
   useEffect(() => {
-    if (
-      scene !== "product" ||
-      lifecycle.paused ||
-      productAnnouncedRef.current
-    ) {
-      return;
-    }
-    productAnnouncedRef.current = true;
-    sounds.playProduct();
-  }, [lifecycle.paused, scene, sounds]);
+    if (scene !== "completion") return;
+    const timeout = window.setTimeout(() => {
+      setScene("product");
+    }, GAME_COMPLETE_HOLD_MS);
+    return () => window.clearTimeout(timeout);
+  }, [scene]);
 
   useEffect(() => {
     if (scene !== "product") return;
@@ -85,8 +81,7 @@ export default function App() {
     }
     endcardAnnouncedRef.current = true;
     trackEvent("ENDCARD_SHOWN");
-    sounds.playEndcard();
-  }, [lifecycle.paused, scene, sounds]);
+  }, [lifecycle.paused, scene]);
 
   const handleStart = () => {
     if (startedRef.current) return;
@@ -101,12 +96,20 @@ export default function App() {
     sounds.stopRolling();
     notifyGameEnd();
     trackEvent("CHALLENGE_SOLVED");
-    setScene("product");
+    setScene("completion");
   };
 
   const handleCollision = () => {
     sounds.stopRolling();
     sounds.playFail();
+  };
+
+  const handleCollect = (completesGame: boolean) => {
+    if (completesGame) {
+      sounds.playCompletion();
+      return;
+    }
+    sounds.playCollect();
   };
 
   const stageStyle = {
@@ -139,7 +142,9 @@ export default function App() {
 
   return (
     <main
-      className={`app${scene === "game" ? "" : " app--product"}`}
+      className={`app${
+        scene === "product" || scene === "endcard" ? " app--product" : ""
+      }`}
       data-orientation={layout.viewportOrientation}
       style={appStyle}
     >
@@ -157,7 +162,7 @@ export default function App() {
       <div className="viewport-bottom-panel" aria-hidden="true" />
       <div
         className={`design-stage design-stage--${
-          scene === "game" ? "game" : "product"
+          scene === "game" || scene === "completion" ? "game" : "product"
         }`}
         style={stageStyle}
       >
@@ -168,7 +173,7 @@ export default function App() {
           sounds={sounds}
           onChallengeStart={handleStart}
           onChallengeSolved={handleSolved}
-          onCollect={sounds.playCollect}
+          onCollect={handleCollect}
           onCollision={handleCollision}
           onCta={triggerCTA}
         />

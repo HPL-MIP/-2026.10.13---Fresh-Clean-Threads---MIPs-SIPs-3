@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "preview": "vite preview",
+    "build:completion-sfx": "node scripts/build-completion-timeline.mjs",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && node scripts/build-all.mjs"
   },

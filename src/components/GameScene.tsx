@@ -11,6 +11,7 @@ import {
   BIKE_FRAME_ALIGNMENT,
   BIKE_FRAME_TIMING,
   BIKE_POSITION,
+  BIKE_SCALE,
   BIKE_WHEEL_POSITION,
   GAMEPLAY,
   LAYOUT,
@@ -29,7 +30,7 @@ type GameSceneProps = {
   sounds: PlayableSoundHandle;
   onChallengeStart: () => void;
   onChallengeSolved: () => void;
-  onCollect: () => void;
+  onCollect: (completesGame: boolean) => void;
   onCollision: () => void;
   onCta: () => void;
 };
@@ -135,22 +136,23 @@ function getFloorY(layout: ResponsiveState) {
 }
 
 function getBikeGeometry(layout: ResponsiveState) {
-  const width =
+  const baseWidth =
     layout.orientation === "portrait"
       ? GAMEPLAY.bikeWidthPortrait
       : GAMEPLAY.bikeWidthLandscape;
-  const scale = width / BIKE_BASE_WIDTH;
-  const bodyHeight = BIKE_BASE_HEIGHT * scale;
-  const wheelSize = WHEEL_BASE_SIZE * scale;
-  const wheelY = WHEEL_BASE_Y * scale;
+  const width = baseWidth * BIKE_SCALE[layout.viewportOrientation];
+  const geometryScale = width / BIKE_BASE_WIDTH;
+  const bodyHeight = BIKE_BASE_HEIGHT * geometryScale;
+  const wheelSize = WHEEL_BASE_SIZE * geometryScale;
+  const wheelY = WHEEL_BASE_Y * geometryScale;
 
   return {
     width,
     bodyHeight,
     wheelSize,
     wheelY,
-    rearWheelX: REAR_WHEEL_BASE_X * scale,
-    frontWheelX: FRONT_WHEEL_BASE_X * scale,
+    rearWheelX: REAR_WHEEL_BASE_X * geometryScale,
+    frontWheelX: FRONT_WHEEL_BASE_X * geometryScale,
     totalHeight: Math.max(bodyHeight, wheelY + wheelSize),
   };
 }
@@ -402,9 +404,10 @@ export function GameScene({
           : GAMEPLAY.bikeXLandscape) +
         BIKE_POSITION[previous.viewportOrientation].x;
       const previousBikeWidth =
-        previous.orientation === "portrait"
+        (previous.orientation === "portrait"
           ? GAMEPLAY.bikeWidthPortrait
-          : GAMEPLAY.bikeWidthLandscape;
+          : GAMEPLAY.bikeWidthLandscape) *
+        BIKE_SCALE[previous.viewportOrientation];
       const currentBikeX =
         getBikeX(current) + BIKE_POSITION[current.viewportOrientation].x;
       const currentBikeWidth = getBikeGeometry(current).width;
@@ -715,6 +718,7 @@ export function GameScene({
       const bike = getBikeGeometry(current);
       const bikeX = getBikeX(current);
       const bikePosition = BIKE_POSITION[current.viewportOrientation];
+      const bikeScale = BIKE_SCALE[current.viewportOrientation];
       const bikeDrawX = bikeX + bikePosition.x;
       const bikeDrawY = world.bikeY + bikePosition.y;
       const restingBikeY = floor - bike.totalHeight;
@@ -823,7 +827,9 @@ export function GameScene({
 
             if (collected) {
               world.collectEffects.push(0);
-              callbackRef.current.onCollect();
+              const completesGame =
+                world.score + 1 >= GAMEPLAY.targetScore;
+              callbackRef.current.onCollect(completesGame);
               world.score += 1;
               setScore(world.score);
               if (world.score >= GAMEPLAY.targetScore) {
@@ -898,7 +904,10 @@ export function GameScene({
 
       world.collectEffects.forEach((age) => {
         const progress = age / GAMEPLAY.collectEffectDurationSeconds;
-        const width = (portrait ? 500 : 420) * (0.8 + progress * 0.28);
+        const width =
+          (portrait ? 500 : 420) *
+          bikeScale *
+          (0.8 + progress * 0.28);
         const height = width * (559 / 486);
         context.save();
         context.globalAlpha = Math.max(0, 1 - progress * 0.72);
@@ -919,21 +928,21 @@ export function GameScene({
       drawRotatedImage(
         context,
         images.wheel,
-        bikeDrawX + bike.rearWheelX + rearWheelPosition.x,
-        bikeDrawY + bike.wheelY + rearWheelPosition.y,
+        bikeDrawX + bike.rearWheelX + rearWheelPosition.x * bikeScale,
+        bikeDrawY + bike.wheelY + rearWheelPosition.y * bikeScale,
         bike.wheelSize,
         world.wheelRotation,
       );
       drawRotatedImage(
         context,
         images.wheel,
-        bikeDrawX + bike.frontWheelX + frontWheelPosition.x,
-        bikeDrawY + bike.wheelY + frontWheelPosition.y,
+        bikeDrawX + bike.frontWheelX + frontWheelPosition.x * bikeScale,
+        bikeDrawY + bike.wheelY + frontWheelPosition.y * bikeScale,
         bike.wheelSize,
         world.wheelRotation,
       );
       const frameIndex =
-        world.status === "running"
+        world.status === "running" || world.status === "complete"
           ? Math.floor(
               world.frameClock / BIKE_FRAME_TIMING.runningSecondsPerFrame,
             ) % 2
@@ -944,8 +953,8 @@ export function GameScene({
         ];
       context.drawImage(
         images.bikeFrames[frameIndex],
-        bikeDrawX + framePosition.x,
-        bikeDrawY + framePosition.y,
+        bikeDrawX + framePosition.x * bikeScale,
+        bikeDrawY + framePosition.y * bikeScale,
         bike.width,
         bike.bodyHeight,
       );
