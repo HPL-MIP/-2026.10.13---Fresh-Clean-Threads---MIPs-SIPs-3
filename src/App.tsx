@@ -47,6 +47,7 @@ export default function App() {
 
     const handleDebugKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "0" || event.repeat) return;
+      sounds.stopRolling();
       setScene("product");
     };
 
@@ -84,7 +85,8 @@ export default function App() {
     }
     endcardAnnouncedRef.current = true;
     trackEvent("ENDCARD_SHOWN");
-  }, [lifecycle.paused, scene]);
+    sounds.playEndcard();
+  }, [lifecycle.paused, scene, sounds]);
 
   const handleStart = () => {
     if (startedRef.current) return;
@@ -96,12 +98,14 @@ export default function App() {
   const handleSolved = () => {
     if (completedRef.current) return;
     completedRef.current = true;
+    sounds.stopRolling();
     notifyGameEnd();
     trackEvent("CHALLENGE_SOLVED");
     setScene("product");
   };
 
   const handleCollision = () => {
+    sounds.stopRolling();
     sounds.playFail();
   };
 
@@ -119,6 +123,7 @@ export default function App() {
   const appStyle = {
     "--panel-top": `${roadTop + roadHeight - panelOverlap}px`,
     "--product-background-blur": `${PRODUCT_EFFECTS.backgroundBlurPx}px`,
+    "--product-background-inset": `${-PRODUCT_EFFECTS.backgroundBlurPx * 2}px`,
     "--product-stage-blur": `${PRODUCT_EFFECTS.backgroundBlurPx / layout.scale}px`,
     "--product-overlay-opacity": PRODUCT_EFFECTS.overlayOpacity,
     "--z-background": Z_INDEX.background,

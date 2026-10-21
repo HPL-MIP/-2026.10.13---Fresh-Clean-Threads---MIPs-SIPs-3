@@ -518,6 +518,7 @@ export function GameScene({
       const restingBikeY = getFloorY(current) - bike.totalHeight;
       const onGround = world.bikeY >= restingBikeY - 2;
 
+      if (onGround) callbackRef.current.sounds.stopRolling();
       callbackRef.current.sounds.beginGameplayGesture({
         interactionId,
         jump: onGround,
@@ -724,6 +725,8 @@ export function GameScene({
       lastTime = now;
 
       if (world.status === "running" && !pausedRef.current) {
+        const wasAirborne =
+          world.bikeY < restingBikeY - 2 || world.bikeVelocity !== 0;
         world.bikeVelocity += GAMEPLAY.gravity * delta;
         world.bikeY += world.bikeVelocity * delta;
         world.wheelRotation += delta * 9.5;
@@ -731,6 +734,7 @@ export function GameScene({
         if (world.bikeY >= restingBikeY) {
           world.bikeY = restingBikeY;
           world.bikeVelocity = 0;
+          if (wasAirborne) callbackRef.current.sounds.playRolling();
         }
 
         const travel = speed * delta;

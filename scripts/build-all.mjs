@@ -149,9 +149,11 @@ const binaryAssets = [
   "Assets/Histrips Assets/wheel.webp",
   "Assets/Histrips Assets/YOU’VE GOT!.webp",
   "Assets/sfx/Bonus Chime.mp3",
+  "Assets/sfx/end.mp3",
   "Assets/sfx/Fail Sound.mp3",
   "Assets/sfx/Special Chime Cling.mp3",
-  "src/assets/sounds/Metal Clank.optimized.wav",
+  "Assets/sfx/Woosh 3.mp3",
+  "src/assets/sounds/RollingBall.optimized.wav",
 ];
 
 for (const asset of binaryAssets) {
