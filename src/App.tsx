@@ -2,9 +2,15 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { trackEvent } from "./analytics";
 import { assets } from "./assets";
 import { GameScene } from "./components/GameScene";
-import { EndcardScene } from "./components/EndcardScene";
 import { ProductScene } from "./components/ProductScene";
-import { GAMEPLAY, PRODUCT_EFFECTS, Z_INDEX } from "./constants";
+import { TemporaryEndcard } from "./components/TemporaryEndcard";
+import {
+  BOTTOM_PANEL_OVERLAP,
+  PRODUCT_EFFECTS,
+  PRODUCT_SCENE_DURATION_MS,
+  ROAD_LAYOUT,
+  Z_INDEX,
+} from "./constants";
 import { useResponsive } from "./hooks/useResponsive";
 import { useSound } from "./hooks/useSound";
 import {
@@ -41,7 +47,6 @@ export default function App() {
 
     const handleDebugKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "0" || event.repeat) return;
-      sounds.stopRolling();
       setScene("product");
     };
 
@@ -65,9 +70,21 @@ export default function App() {
     if (scene !== "product") return;
     const timeout = window.setTimeout(() => {
       setScene("endcard");
-    }, GAMEPLAY.productDurationMs);
+    }, PRODUCT_SCENE_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [scene]);
+
+  useEffect(() => {
+    if (
+      scene !== "endcard" ||
+      lifecycle.paused ||
+      endcardAnnouncedRef.current
+    ) {
+      return;
+    }
+    endcardAnnouncedRef.current = true;
+    trackEvent("ENDCARD_SHOWN");
+  }, [lifecycle.paused, scene]);
 
   const handleStart = () => {
     if (startedRef.current) return;
@@ -79,21 +96,12 @@ export default function App() {
   const handleSolved = () => {
     if (completedRef.current) return;
     completedRef.current = true;
-    sounds.stopRolling();
     notifyGameEnd();
     trackEvent("CHALLENGE_SOLVED");
     setScene("product");
   };
 
-  const handleEndcardReveal = () => {
-    if (endcardAnnouncedRef.current) return;
-    endcardAnnouncedRef.current = true;
-    trackEvent("ENDCARD_SHOWN");
-    sounds.playEndcard();
-  };
-
   const handleCollision = () => {
-    sounds.stopRolling();
     sounds.playFail();
   };
 
@@ -102,24 +110,16 @@ export default function App() {
     height: `${layout.logicalH}px`,
     transform: `translate3d(${layout.offsetX}px, ${layout.offsetY}px, 0) scale(${layout.scale})`,
   };
-
-  const platformFloorRatio =
-    layout.orientation === "portrait"
-      ? GAMEPLAY.floorRatioPortrait
-      : GAMEPLAY.floorRatioLandscape;
+  const road = ROAD_LAYOUT[layout.orientation];
+  const roadTop = layout.offsetY + road.top * layout.scale;
+  const roadHeight = road.height * layout.scale;
+  const panelOverlap =
+    BOTTOM_PANEL_OVERLAP[layout.viewportOrientation] * layout.scale;
 
   const appStyle = {
-    "--stage-width": `${layout.logicalW * layout.scale}px`,
-    "--stage-height": `${layout.logicalH * layout.scale}px`,
-    "--platform-height": `${
-      layout.logicalH *
-      (1 - platformFloorRatio) *
-      layout.scale
-    }px`,
+    "--panel-top": `${roadTop + roadHeight - panelOverlap}px`,
     "--product-background-blur": `${PRODUCT_EFFECTS.backgroundBlurPx}px`,
-    "--product-stage-blur": `${
-      PRODUCT_EFFECTS.backgroundBlurPx / layout.scale
-    }px`,
+    "--product-stage-blur": `${PRODUCT_EFFECTS.backgroundBlurPx / layout.scale}px`,
     "--product-overlay-opacity": PRODUCT_EFFECTS.overlayOpacity,
     "--z-background": Z_INDEX.background,
     "--z-platform": Z_INDEX.platform,
@@ -139,7 +139,7 @@ export default function App() {
       style={appStyle}
     >
       <img
-        className={`viewport-background viewport-background--${layout.viewportOrientation}`}
+        className="viewport-background"
         src={
           layout.viewportOrientation === "portrait"
             ? assets.portraitBackground
@@ -149,9 +149,10 @@ export default function App() {
         draggable={false}
         aria-hidden="true"
       />
+      <div className="viewport-bottom-panel" aria-hidden="true" />
       <div
-        className={`design-stage${
-          scene === "game" ? " design-stage--game" : " design-stage--product"
+        className={`design-stage design-stage--${
+          scene === "game" ? "game" : "product"
         }`}
         style={stageStyle}
       >
@@ -170,13 +171,10 @@ export default function App() {
           <ProductScene layout={layout} onCta={triggerCTA} />
         )}
       </div>
-      {scene === "game" && (
-        <div className="viewport-platform" aria-hidden="true" />
-      )}
-      {scene === "endcard" && (
-        <EndcardScene
-          paused={lifecycle.paused}
-          onReveal={handleEndcardReveal}
+      {(scene === "product" || scene === "endcard") && (
+        <TemporaryEndcard
+          visible={scene === "endcard"}
+          paused={lifecycle.paused || scene !== "endcard"}
           onCta={triggerCTA}
         />
       )}

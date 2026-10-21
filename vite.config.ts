@@ -1,185 +1,102 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
-const END_MARKER_ERROR = "Unable to sanitize the supplied endcard";
+const virtualEndcardId = "virtual:histrips-sample-endcard";
+const resolvedVirtualEndcardId = `\0${virtualEndcardId}`;
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
-function replaceSection(
-  source: string,
-  startMarker: string,
-  endMarker: string,
-  replacement: string,
-) {
-  const start = source.indexOf(startMarker);
-  const end = source.indexOf(endMarker, start + startMarker.length);
-  if (start < 0 || end < 0) {
-    throw new Error(`${END_MARKER_ERROR}: ${startMarker}`);
+function createSanitizedEndcardHtml(sourceHtml: string) {
+  const videoUrls = [
+    ...sourceHtml.matchAll(/data:video\/[^;]+;base64,[A-Za-z0-9+/=]+/g),
+  ].map((match) => match[0]);
+
+  if (videoUrls.length !== 2) {
+    throw new Error(
+      `Expected two embedded videos in sample_endcard.html, found ${videoUrls.length}.`,
+    );
   }
-  return `${source.slice(0, start)}${replacement}${source.slice(
-    end + endMarker.length,
-  )}`;
+
+  const videoDeclarations =
+    videoUrls[0] === videoUrls[1]
+      ? `const sharedVideo=${JSON.stringify(videoUrls[0])};const portraitVideo=sharedVideo;const landscapeVideo=sharedVideo;`
+      : `const portraitVideo=${JSON.stringify(videoUrls[0])};const landscapeVideo=${JSON.stringify(videoUrls[1])};`;
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<style>
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000}
+body{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center}
+#video-container{width:100%;height:100vh;height:100dvh;overflow:hidden}
+#sip-video{display:block;width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+<div id="video-container"><video id="sip-video" preload="auto" autoplay muted loop playsinline></video></div>
+<script>
+(function(){
+${videoDeclarations}
+const targetAspectRatio=16/9;
+const extremeRatioThreshold=1.8;
+const video=document.getElementById("sip-video");
+const container=document.getElementById("video-container");
+let pendingFrame=0;
+let lifecyclePaused=false;
+function setContainerSize(widthPct,heightPct){container.style.width=widthPct+"%";container.style.height=heightPct+"%"}
+function tryPlay(){if(lifecyclePaused)return;try{const attempt=video.play();if(attempt&&typeof attempt.catch==="function")attempt.catch(function(){})}catch(_error){}}
+function update(){
+  const portrait=window.matchMedia?!window.matchMedia("(orientation: landscape)").matches:window.innerHeight>window.innerWidth;
+  const longSide=Math.max(window.innerWidth,window.innerHeight);
+  const shortSide=Math.min(window.innerWidth,window.innerHeight);
+  const width=portrait?shortSide:longSide;
+  const height=portrait?longSide:shortSide;
+  const normalizedRatio=width>height?width/height:height/width;
+  setContainerSize(100,100);
+  if(normalizedRatio>extremeRatioThreshold){
+    if(portrait){setContainerSize(100,(width*targetAspectRatio/height)*100)}
+    else{setContainerSize((height*targetAspectRatio/width)*100,100)}
+  }
+  const nextSource=portrait?portraitVideo:landscapeVideo;
+  if(video.getAttribute("src")!==nextSource){video.setAttribute("src",nextSource);video.load()}
+  tryPlay();
+}
+function scheduleUpdate(){if(pendingFrame)return;pendingFrame=requestAnimationFrame(function(){pendingFrame=0;update()})}
+window.addEventListener("resize",scheduleUpdate,{passive:true});
+window.addEventListener("orientationchange",scheduleUpdate,{passive:true});
+window.addEventListener("message",function(event){
+  const data=event.data;
+  if(!data||data.type!=="histrips:endcard-media")return;
+  lifecyclePaused=Boolean(data.paused);
+  if(lifecyclePaused){video.pause()}else{tryPlay()}
+});
+document.addEventListener("visibilitychange",function(){if(document.hidden)video.pause();else tryPlay()});
+update();
+})();
+</script>
+</body>
+</html>`;
 }
 
-function sanitizeEndcard(source: string) {
-  let html = source.replace(
-    /<script src="mraid\.js"><\/script>\s*<script>[\s\S]*?<\/script>/i,
-    "",
-  );
-
-  html = html.replace(
-    /\s*video\.addEventListener\("playing",[\s\S]*?video\.addEventListener\("ended",[^\n]*\);\s*/,
-    "\n",
-  );
-
-  html = replaceSection(
-    html,
-    "// Handles clickthrough only",
-    "let lastTapAt = 0;",
-    "      // The parent playable owns the only click-through path.\n" +
-      "      function handleClickAction() {}\n\n" +
-      "      let lastTapAt = 0;",
-  );
-
-  html = html.replace(
-    "let mraidViewable = true;",
-    "let hostViewable = true;",
-  );
-  html = replaceSection(
-    html,
-    "// MRAID hosts can keep the document visible",
-    "setupMraidViewability();",
-    "      // Visibility is relayed by the parent playable.",
-  );
-
-  html = replaceSection(
-    html,
-    "let adRuntimeStarted = false;",
-    "initializeMraidRuntime();",
-    `      let adRuntimeStarted = false;
-
-      function init() {
-        if (adRuntimeStarted) return;
-        adRuntimeStarted = true;
-        try {
-          startAdRuntime();
-        } catch (error) {
-          console.warn("Unable to start supplied endcard:", error);
-        }
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", init, { once: true });
-      } else {
-        init();
-      }`,
-  );
-
-  const mediaAnchor = `      if (!video || !source || !container) {
-        throw new Error("Required SIP video elements are unavailable.");
-      }`;
-  const mediaReplacement = `${mediaAnchor}
-
-      function notifyParentReady() {
-        window.parent.postMessage({ type: "fct-endcard-ready" }, "*");
-      }
-
-      video.addEventListener("loadeddata", notifyParentReady, { once: true });
-      video.addEventListener("playing", notifyParentReady, { once: true });
-
-      window.addEventListener("message", function (event) {
-        if (event.source !== window.parent || !event.data) return;
-        if (event.data.type === "fct-media-pause") {
-          hostViewable = false;
-          syncWindowActivityState();
-        }
-        if (event.data.type === "fct-media-resume") {
-          hostViewable = true;
-          syncWindowActivityState();
-        }
-      });`;
-  if (!html.includes(mediaAnchor)) {
-    throw new Error(`${END_MARKER_ERROR}: media anchor`);
-  }
-  html = html.replace(mediaAnchor, mediaReplacement);
-
-  html = html.replace(
-    "document.visibilityState === \"visible\" && mraidViewable",
-    "document.visibilityState === \"visible\" && hostViewable",
-  );
-  html = html.replace(
-    "video.play().catch(() => {});",
-    `try {
-            const playback = video.play();
-            if (playback && typeof playback.catch === "function") {
-              playback.catch(function () {});
-            }
-          } catch (_error) {}`,
-  );
-  html = html.replace(
-    "resolveSipEffectiveDate(Date.now(), dateRecurrence, dateOffsetDays)",
-    "resolveSipEffectiveDate(window.getCreativeNow().getTime(), dateRecurrence, dateOffsetDays)",
-  );
-  html = html.replace(
-    "resolveSipDateRangeText(dateRanges, new Date(), dateRangeDefaultText)",
-    "resolveSipDateRangeText(dateRanges, window.getCreativeNow(), dateRangeDefaultText)",
-  );
-  html = html.replace(
-    "var now = new Date();",
-    "var now = window.getCreativeNow();",
-  );
-  html = html.replace(
-    "       * - Defers all MRAID calls and layout decisions until MRAID is ready.",
-    "       * - Defers layout decisions until the document is ready.",
-  );
-
-  const dateHelper = `<script>
-      window.getCreativeNow = function () {
-        var value = new URLSearchParams(window.location.hash.slice(1)).get("date");
-        if (value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
-          var parts = value.split("-").map(Number);
-          var candidate = new Date(0);
-          candidate.setFullYear(parts[0], parts[1] - 1, parts[2]);
-          candidate.setHours(12, 0, 0, 0);
-          if (
-            candidate.getFullYear() === parts[0] &&
-            candidate.getMonth() === parts[1] - 1 &&
-            candidate.getDate() === parts[2]
-          ) return candidate;
-        }
-        return new Date();
-      };
-    </script>`;
-  html = html.replace("</head>", `${dateHelper}\n  </head>`);
-
-  if (/mraid/i.test(html)) {
-    throw new Error(`${END_MARKER_ERROR}: nested host integration remains`);
-  }
-  return html;
-}
-
-function sanitizedEndcardPlugin(): Plugin {
-  const virtualId = "virtual:sanitized-endcard";
-  const resolvedId = `\0${virtualId}`;
-
+function sanitizedEndcardPlugin() {
   return {
-    name: "sanitized-endcard",
-    enforce: "pre",
-    resolveId(id) {
-      return id === virtualId ? resolvedId : null;
+    name: "sanitized-histrips-endcard",
+    resolveId(id: string) {
+      return id === virtualEndcardId ? resolvedVirtualEndcardId : null;
     },
-    load(id) {
-      if (id !== resolvedId) return null;
+    load(id: string) {
+      if (id !== resolvedVirtualEndcardId) return null;
       const sourcePath = resolve(
-        process.cwd(),
-        "Assets/freshcleanthreads_acslanot_sip_20261013_03_emily_product_card_human_none_none.html",
+        projectRoot,
+        "Assets/Histrips Assets/sample_endcard.html",
       );
-      const sanitized = sanitizeEndcard(readFileSync(sourcePath, "utf8"));
-      const dataUrl = `data:text/html;base64,${Buffer.from(sanitized).toString(
-        "base64",
-      )}`;
-      return `export default ${JSON.stringify(dataUrl)};`;
+      const sourceHtml = readFileSync(sourcePath, "utf8");
+      return `export default ${JSON.stringify(createSanitizedEndcardHtml(sourceHtml))};`;
     },
   };
 }

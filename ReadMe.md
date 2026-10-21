@@ -1,43 +1,25 @@
-Lets create a the trex-game alternative for this advertisement.
+This will be a reskin game, same as our previous game.
 
-ive provided the assets in Assets folder
+Assets are in @Histrips Assets
+The reference images are in @Reference Images, from Scene 1 to Scene 6. (scene 6 is product scene.)
 
-Layout
-- 4 Scenes (Intro Scene, Game Scene and Product Scene, Endcard)
-- use portrait.webp as background for portrait
-- use landscape.webp as background for landscape
-- use bottom_platform.webp as the ground for the game. its already 2k by 2k for responsiveness, incase it goes landscape orientation.
-- use Roboto-Regular.ttf for the scoreboard of "0 out of 6" till "6 out of 6" font size is 33.47, black color.
+use @portrait for portrait orientations as bg, and @landscape as our landscape bg for landscape orientation. on landscape extend the @road and the black panel below it.
 
 
-Intro Scene;
-- try to copy the introscene image from PreviewImages folder for layout.
-- this scene have the Logo.webp, ScoreBoard.webp, TAP TO START.webp, ball.webp.
+on game scenes layout and mechanics.
+-on start of the game, static, display @logo, @Collect for Reveal, @Collect atleast 5 Products, then @Tap To Start in the middle. i made it 2k width so it can accomodate landscape. but for landscape just zoom it in. then at the bottom is our bike player, theres 2 frames for bike animation @bike_frame_1 and bike_frame_2. the use @wheel should be positioned at the 2 ends of the bike. since this will be animated to roll. when bike is moving. then the @road where the biker will be on.then a black panel at the bottom, and a @CTA at the bottom center. (Scene 1)
 
-Game Scene;
-- use GameScene.png as reference for layout
-- this is where we add the moving obstacle, theres 4 types of obstacle with different height randomize spawn them and slide them from right to left, once the game start.
-- make sure theres enough spacing in between each obstacle for the ball to be able to jump again and react accordingly.
-- position the tshirts either on top of the obstacle or in between the obstacles on the ground. make sure to spawn only 1 of each tshirt. since we will be collecting 
+when riding randomly spawn these obstacles @cone and @manhole and slide them from right to left(Scene 2 and 3). same as our previous game. when the bike hits these obstacles pop up @Poof(Scene 5) then spawn @Try Again(Scene 5) and resets game. the goal of the game is to collect 5 products so randomly spawn these products along the road, @product 1, @product 2, and @product 3. it can be above the manhole, above the cone or just on the road. when collecting a product pop up @EFFECTS behind the bike(Scene 4)
 
-Product Scene;
-- use ProductScene.png as reference for layout  
-- This will be a overlay scene, our main background is the gamescene, then the bg for product scene will be a panel color #696969 and 80% opacity.
-- in front of that panel, will be the CONGRATULATIONS!.webp, product.webp, Fall Essentials Crew 6Pack.webp then CTA at the bottom
+note: on each product collected, use @Inter_bold_72.35.ttf, black color and font size is 72.35
+0 Point
+1 Point
+2 Points
+3 Points
+4 Points
+5 Points
 
-Encard 
-- just use temporary_endcard.html
+when bike completes 5 products, fade in the product scene.
 
-
-Gameplay, Animation and flow.
-- On Scene 1, its just a static scene, the obstacles only moves when user pressed anywhere on the screen. 
-- to play this, if a user tap on the screen, the ball jumps. same as trex game.
-- once user pressed the screen, fade out the TAP TO START.webp and animate the obstacle sliding from right to left, offsetted at the very right of the screen. spawn random obstacles and add the tshirts randomly, maybe add each tshirt at every 2 or 3 obstacles.
-- if a tshirt has been collected by the ball, pop Poof.webp, then fade out the tshirt and poof. 
-- till all tshirts has been completed.
-- if the ball has hit the obstacle, stop the game, and reset the game to intro scene.
-- if all 6 tshirts has been collected, stop the game and fade in the product scene.
-- when product scene appears, consecutively fade in pulse out each items from top to bottom excluding the LOGO and CTA (CONGRATULATIONS!.webp,product.webp and Fall Essentials Crew 6Pack.)
-- Display the product scene for 2 seconds then fade in the endcard. which is the temporary_endcard.html.
-
- 
+on product scene layout and mechanics.
+same as product scene bg before, the main bg is our game and it has an overlay bg of #000000 - 80 Opacity - Background Blur. and display @YOU'VE GOT!, @Lavender Mout Tape, Pink Nasal Strips & White Nasal Strips, then below it, @product_main and CTA below. (Scene6)

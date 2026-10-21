@@ -4,9 +4,13 @@ import { resolve } from "node:path";
 const root = process.cwd();
 const outputPath = resolve(root, "dist/index.html");
 const deliveryName =
-  "freshcleanthreads_acslanot_mip_20261013_03_ecomm_game_unknown_human_none_none.html";
+  "histrips_acslanot_mip_20261021_01_ecomm_game_unknown_human_none_none.html";
 const deliveryPath = resolve(root, "dist", deliveryName);
 const maxBytes = 5_000_000;
+const suppliedEndcardPath = resolve(
+  root,
+  "Assets/Histrips Assets/sample_endcard.html",
+);
 
 function fail(message) {
   throw new Error(`[AppLovin build] ${message}`);
@@ -54,8 +58,6 @@ const requiredSourceChecks = [
   "gameStart",
   "gameEnd",
   "gameClose",
-  "URLSearchParams",
-  "getCreativeNow",
 ];
 
 for (const check of requiredSourceChecks) {
@@ -92,35 +94,6 @@ if (/https?:\/\//i.test(html)) {
   fail("A literal external protocol remains in the output.");
 }
 
-const htmlDataMatches = [
-  ...html.matchAll(/data:text\/html;base64,([A-Za-z0-9+/=]+)/g),
-];
-if (htmlDataMatches.length !== 1) {
-  fail(`Expected one embedded HTML endcard, found ${htmlDataMatches.length}.`);
-}
-
-const embeddedEndcard = Buffer.from(htmlDataMatches[0][1], "base64").toString(
-  "utf8",
-);
-if (!embeddedEndcard.startsWith("<!doctype html>")) {
-  fail("The embedded endcard is not valid HTML content.");
-}
-if (/mraid/i.test(embeddedEndcard)) {
-  fail("The embedded endcard still contains nested MRAID integration.");
-}
-if (/<script\b[^>]*\bsrc=/i.test(embeddedEndcard)) {
-  fail("The embedded endcard contains an external script reference.");
-}
-if (/https?:\/\//i.test(embeddedEndcard)) {
-  fail("The embedded endcard contains a literal external protocol.");
-}
-if ((embeddedEndcard.match(/<video\b/gi) ?? []).length !== 1) {
-  fail("The embedded endcard video surface is missing or duplicated.");
-}
-if (!embeddedEndcard.includes("fct-endcard-ready")) {
-  fail("The embedded endcard is missing its decoded-frame readiness signal.");
-}
-
 const markupOnly = html.replace(
   /(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi,
   "$1$2",
@@ -129,7 +102,11 @@ const resourceAttributes = [
   ...markupOnly.matchAll(/\b(?:src|href)=["']([^"']+)["']/gi),
 ].map((match) => match[1]);
 for (const resource of resourceAttributes) {
-  if (resource === "mraid.js" || resource.startsWith("data:") || resource.startsWith("#")) {
+  if (
+    resource === "mraid.js" ||
+    resource.startsWith("data:") ||
+    resource.startsWith("#")
+  ) {
     continue;
   }
   fail(`External or separate resource remains: ${resource}`);
@@ -145,45 +122,70 @@ for (const resource of cssUrls) {
 }
 
 const binaryAssets = [
-  "ball.webp",
-  "bottom_platform.webp",
-  "CONGRATULATIONS!.webp",
-  "CTA.webp",
-  "Fall Essentials Crew 6Pack.webp",
-  "landscape.webp",
-  "LOGO.webp",
-  "obstacle1.webp",
-  "obstacle2.webp",
-  "obstacle3.webp",
-  "obstacle4.webp",
-  "Poof.webp",
-  "portrait.webp",
-  "product.webp",
-  "Roboto-Regular.ttf",
-  "ScoreBoard.webp",
-  "TAP TO START.webp",
-  "tshirt1.webp",
-  "tshirt2.webp",
-  "tshirt3.webp",
-  "tshirt4.webp",
-  "tshirt5.webp",
-  "tshirt6.webp",
-  "tutorialhand.webp",
+  "Assets/Histrips Assets/bike_frame_1.webp",
+  "Assets/Histrips Assets/bike_frame_2.webp",
+  "Assets/Histrips Assets/Collect atleast 5 Products.webp",
+  "Assets/Histrips Assets/Collect for Reveal.webp",
+  "Assets/Histrips Assets/cone.webp",
+  "Assets/Histrips Assets/CTA.webp",
+  "Assets/Histrips Assets/EFFECTS.webp",
+  "Assets/Histrips Assets/Hand.webp",
+  "Assets/Histrips Assets/Inter_bold_72.35.ttf",
+  "Assets/Histrips Assets/landscape.webp",
+  "Assets/Histrips Assets/Lavender Mouth Tape, Pink Nasal Strips & White Nasal Strips.webp",
+  "Assets/Histrips Assets/logo.webp",
+  "Assets/Histrips Assets/logo_product_scene.webp",
+  "Assets/Histrips Assets/manhole.webp",
+  "Assets/Histrips Assets/Poof.webp",
+  "Assets/Histrips Assets/portrait.webp",
+  "Assets/Histrips Assets/product 1.webp",
+  "Assets/Histrips Assets/product 2.webp",
+  "Assets/Histrips Assets/product 3.webp",
+  "Assets/Histrips Assets/product_main.webp",
+  "Assets/Histrips Assets/road_merged_long.webp",
+  "Assets/Histrips Assets/Group 8352.webp",
+  "Assets/Histrips Assets/TAP TO START.webp",
+  "Assets/Histrips Assets/TRY AGAIN.webp",
+  "Assets/Histrips Assets/wheel.webp",
+  "Assets/Histrips Assets/YOU’VE GOT!.webp",
+  "Assets/sfx/Bonus Chime.mp3",
+  "Assets/sfx/Fail Sound.mp3",
+  "Assets/sfx/Special Chime Cling.mp3",
+  "src/assets/sounds/Metal Clank.optimized.wav",
 ];
 
 for (const asset of binaryAssets) {
-  const bytes = readFileSync(resolve(root, "Assets", asset));
-  const encoded = bytes.toString("base64");
+  const assetBytes = readFileSync(resolve(root, asset));
+  const encoded = assetBytes.toString("base64");
   if (!html.includes(encoded)) {
     fail(`Asset bytes were not embedded exactly: ${asset}`);
   }
 }
 
-const inlineScripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+const suppliedEndcard = readFileSync(suppliedEndcardPath, "utf8");
+const suppliedVideoPayloads = [
+  ...suppliedEndcard.matchAll(/data:video\/[^;]+;base64,([A-Za-z0-9+/=]+)/g),
+].map((match) => match[1]);
+if (suppliedVideoPayloads.length !== 2) {
+  fail(
+    `Expected two video payloads in sample_endcard.html, found ${suppliedVideoPayloads.length}.`,
+  );
+}
+for (const payload of new Set(suppliedVideoPayloads)) {
+  if (!html.includes(payload)) {
+    fail("A supplied sample_endcard.html video payload is missing from the build.");
+  }
+}
+if (!html.includes("histrips:endcard-media")) {
+  fail("The parent-controlled temporary endcard lifecycle channel is missing.");
+}
+
+const inlineScripts = [
+  ...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi),
+];
 for (const [index, match] of inlineScripts.entries()) {
   if (!match[1].trim()) continue;
   try {
-    // Syntax validation only; the creative is not executed during packaging.
     new Function(match[1]);
   } catch (error) {
     fail(`Inline script ${index + 1} does not parse: ${error.message}`);

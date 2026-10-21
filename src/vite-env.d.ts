@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
-declare module "virtual:sanitized-endcard" {
-  const dataUrl: string;
-  export default dataUrl;
+declare module "virtual:histrips-sample-endcard" {
+  const html: string;
+  export default html;
 }
 
 interface Window {

@@ -1,5 +1,9 @@
 import type { CSSProperties } from "react";
 import { assets } from "../assets";
+import productDescription from "../../Assets/Histrips Assets/Lavender Mouth Tape, Pink Nasal Strips & White Nasal Strips.webp";
+import productLogo from "../../Assets/Histrips Assets/logo_product_scene.webp";
+import productMain from "../../Assets/Histrips Assets/product_main.webp";
+import youveGot from "../../Assets/Histrips Assets/YOU’VE GOT!.webp";
 import { PRODUCT_LAYOUT } from "../constants";
 import type { ResponsiveState } from "../hooks/useResponsive";
 
@@ -18,9 +22,10 @@ function authoredStyle(item: { left: number; top: number; width: number }) {
 
 export function ProductScene({ layout, onCta }: ProductSceneProps) {
   const authored = {
-    congratulations: PRODUCT_LAYOUT.congratulations[layout.orientation],
+    logo: PRODUCT_LAYOUT.logo[layout.orientation],
+    headline: PRODUCT_LAYOUT.headline[layout.orientation],
+    description: PRODUCT_LAYOUT.description[layout.orientation],
     product: PRODUCT_LAYOUT.product[layout.orientation],
-    title: PRODUCT_LAYOUT.title[layout.orientation],
     cta: PRODUCT_LAYOUT.cta[layout.orientation],
   };
   const overlayStyle = {
@@ -34,22 +39,28 @@ export function ProductScene({ layout, onCta }: ProductSceneProps) {
     <section className="product-scene" aria-label="Product reveal">
       <div className="product-dim" style={overlayStyle} />
       <img
-        className="product-item product-item--one"
-        src={assets.congratulations}
-        alt="Congratulations!"
-        style={authoredStyle(authored.congratulations)}
+        className="product-item product-item--logo"
+        src={productLogo}
+        alt="Histrips"
+        style={authoredStyle(authored.logo)}
       />
       <img
-        className="product-item product-item--two"
-        src={assets.product}
-        alt="Fall Essentials Crew 6-Pack"
+        className="product-item product-item--headline"
+        src={youveGot}
+        alt="You've got!"
+        style={authoredStyle(authored.headline)}
+      />
+      <img
+        className="product-item product-item--description"
+        src={productDescription}
+        alt="Lavender Mouth Tape, Pink Nasal Strips and White Nasal Strips"
+        style={authoredStyle(authored.description)}
+      />
+      <img
+        className="product-item product-item--main"
+        src={productMain}
+        alt="Lavender Mouth Tape, Pink Nasal Strips and White Nasal Strips"
         style={authoredStyle(authored.product)}
-      />
-      <img
-        className="product-item product-item--three"
-        src={assets.productTitle}
-        alt="Fall Essentials Crew 6-Pack"
-        style={authoredStyle(authored.title)}
       />
       <button
         className="product-cta"

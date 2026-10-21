@@ -1,12 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 type CueName =
-  | "rolling"
   | "jump"
   | "fail"
   | "collect"
-  | "product"
-  | "endcard";
+  | "product";
 type VoicePhase = "idle" | "priming" | "starting" | "playing" | "pending";
 
 type SoundSources = Record<CueName, string>;
@@ -47,12 +45,9 @@ export type PlayableSoundHandle = {
   retryGameplayGesture: (interactionId: number) => void;
   endGameplayGesture: (interactionId: number) => void;
   cancelGameplayGesture: (interactionId: number) => void;
-  playRolling: () => void;
-  stopRolling: () => void;
   playFail: () => void;
   playCollect: () => void;
   playProduct: () => void;
-  playEndcard: () => void;
 };
 
 const PENDING_FRESHNESS_MS = 5_000;
@@ -63,12 +58,10 @@ const POOL_CONFIG: Record<
   CueName,
   { poolSize: number; loop: boolean; volume: number }
 > = {
-  rolling: { poolSize: 1, loop: true, volume: 0.72 },
   jump: { poolSize: 2, loop: false, volume: 0.2 },
   fail: { poolSize: 1, loop: false, volume: 1 },
   collect: { poolSize: 3, loop: false, volume: 0.95 },
   product: { poolSize: 1, loop: false, volume: 1 },
-  endcard: { poolSize: 1, loop: false, volume: 1 },
 };
 
 class PlayableAudioManager {
@@ -77,18 +70,15 @@ class PlayableAudioManager {
   private gestureSeen = false;
   private lifecyclePaused: boolean;
   private audioVolume: number;
-  private rollingWasActive = false;
 
   constructor(sources: SoundSources, lifecycle: SoundLifecycle) {
     this.lifecyclePaused = lifecycle.paused;
     this.audioVolume = this.normalizeVolume(lifecycle.audioVolume);
     this.pools = {
-      rolling: this.createPool("rolling", sources.rolling),
       jump: this.createPool("jump", sources.jump),
       fail: this.createPool("fail", sources.fail),
       collect: this.createPool("collect", sources.collect),
       product: this.createPool("product", sources.product),
-      endcard: this.createPool("endcard", sources.endcard),
     };
   }
 
@@ -245,7 +235,7 @@ class PlayableAudioManager {
 
   private primeFutureVoices() {
     (
-      ["rolling", "jump", "fail", "collect", "product", "endcard"] as const
+      ["jump", "fail", "collect", "product"] as const
     ).forEach((name) => {
       this.pools[name].voices.forEach((voice) =>
         this.primeVoice(this.pools[name], voice),
@@ -381,7 +371,6 @@ class PlayableAudioManager {
       );
       if (pendingVoice) {
         this.beginAudible(pool, pendingVoice, interactionId, false, false, true);
-        this.rollingWasActive = false;
         return;
       }
     }
@@ -389,7 +378,6 @@ class PlayableAudioManager {
     const voice = this.chooseVoice(pool);
     if (!voice) return;
     this.beginAudible(pool, voice, interactionId, true, false);
-    if (pool.loop) this.rollingWasActive = false;
   }
 
   private retryVoice(pool: SoundPool, voice: Voice, boundary: boolean) {
@@ -491,17 +479,6 @@ class PlayableAudioManager {
     });
   }
 
-  playRolling() {
-    this.requestCue("rolling", null);
-  }
-
-  stopRolling() {
-    this.rollingWasActive = false;
-    this.pools.rolling.voices.forEach((voice) =>
-      this.releaseVoice(this.pools.rolling, voice, voice.primed),
-    );
-  }
-
   playFail() {
     this.requestCue("fail", null);
   }
@@ -512,10 +489,6 @@ class PlayableAudioManager {
 
   playProduct() {
     this.requestCue("product", null);
-  }
-
-  playEndcard() {
-    this.requestCue("endcard", null);
   }
 
   setLifecycle(lifecycle: SoundLifecycle) {
@@ -533,20 +506,11 @@ class PlayableAudioManager {
     this.lifecyclePaused = nextPaused;
 
     if (nextPaused) {
-      this.rollingWasActive = this.pools.rolling.voices.some(
-        (voice) => voice.phase !== "idle",
-      );
       Object.values(this.pools).forEach((pool) => {
         pool.voices.forEach((voice) =>
           this.releaseVoice(pool, voice, voice.primed),
         );
       });
-      return;
-    }
-
-    if (this.rollingWasActive && this.activeInteractions.size > 0) {
-      const [interactionId] = this.activeInteractions;
-      this.requestCue("rolling", interactionId ?? null);
     }
   }
 
@@ -583,10 +547,9 @@ export function useSound(
     };
   }, [
     sources.collect,
-    sources.endcard,
+    sources.fail,
     sources.jump,
     sources.product,
-    sources.rolling,
   ]);
 
   useEffect(() => {
@@ -603,12 +566,9 @@ export function useSound(
         managerRef.current?.endGameplayGesture(interactionId),
       cancelGameplayGesture: (interactionId) =>
         managerRef.current?.cancelGameplayGesture(interactionId),
-      playRolling: () => managerRef.current?.playRolling(),
-      stopRolling: () => managerRef.current?.stopRolling(),
       playFail: () => managerRef.current?.playFail(),
       playCollect: () => managerRef.current?.playCollect(),
       playProduct: () => managerRef.current?.playProduct(),
-      playEndcard: () => managerRef.current?.playEndcard(),
     }),
     [],
   );

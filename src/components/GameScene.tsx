@@ -1,6 +1,24 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { assets } from "../assets";
-import { GAMEPLAY, LAYOUT, SCORE_TEXT_POSITION } from "../constants";
+import {
+  BIKE_FRAME_ALIGNMENT,
+  BIKE_FRAME_TIMING,
+  BIKE_POSITION,
+  BIKE_WHEEL_POSITION,
+  GAMEPLAY,
+  LAYOUT,
+  MANHOLE_POSITION,
+  ROAD_LAYOUT,
+  TAP_BANNER_SIZE,
+  TAP_BANNER_TEXT_SIZE,
+} from "../constants";
 import type { ResponsiveState } from "../hooks/useResponsive";
 import type { PlayableSoundHandle } from "../hooks/useSound";
 
@@ -16,15 +34,17 @@ type GameSceneProps = {
   onCta: () => void;
 };
 
+type Mode = "intro" | "running" | "crashed" | "complete";
+
 type Obstacle = {
+  kind: 0 | 1;
   x: number;
   width: number;
   height: number;
-  imageIndex: number;
 };
 
 type Collectible = {
-  shirtIndex: number;
+  productIndex: number;
   x: number;
   y: number;
   width: number;
@@ -38,42 +58,39 @@ type Poof = {
 };
 
 type World = {
-  running: boolean;
+  status: Mode;
   score: number;
-  ballY: number;
-  ballVelocity: number;
-  ballRotation: number;
+  bikeY: number;
+  bikeVelocity: number;
+  wheelRotation: number;
+  frameClock: number;
   obstacles: Obstacle[];
   collectibles: Collectible[];
-  poofs: Poof[];
-  shirtQueue: number[];
+  collectEffects: number[];
+  poof: Poof | null;
+  roadOffset: number;
   spawnDistance: number;
-  obstaclesUntilShirt: number;
+  nextObstacleGap: number;
+  obstaclesUntilProduct: number;
 };
 
-const OBSTACLE_HEIGHTS = [185, 17, 124, 224];
-const MIN_SPAWN_OBSTACLE_HEIGHT = 100;
-const SPAWNABLE_OBSTACLE_INDICES = OBSTACLE_HEIGHTS.flatMap(
-  (height, imageIndex) =>
-    height >= MIN_SPAWN_OBSTACLE_HEIGHT ? [imageIndex] : [],
-);
+const BIKE_BASE_WIDTH = 345;
+const BIKE_BASE_HEIGHT = 379;
+const WHEEL_BASE_SIZE = 157;
+const REAR_WHEEL_BASE_X = 14;
+const FRONT_WHEEL_BASE_X = 195;
+const WHEEL_BASE_Y = 244;
+const PRODUCT_ASPECTS = [139 / 171, 117 / 157, 159 / 196];
+const OBSTACLE_ASPECTS = [203 / 188, 345 / 213];
+const ROAD_ASPECT = 2172 / 180;
 
-function shuffledShirts() {
-  const values = [0, 1, 2, 3, 4, 5];
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const next = Math.floor(Math.random() * (index + 1));
-    [values[index], values[next]] = [values[next], values[index]];
-  }
-  return values;
-}
-
-function randomShirtObstacleInterval() {
+function randomProductInterval() {
   return (
-    GAMEPLAY.shirtObstacleIntervalMin +
+    GAMEPLAY.productObstacleIntervalMin +
     Math.floor(
       Math.random() *
-        (GAMEPLAY.shirtObstacleIntervalMax -
-          GAMEPLAY.shirtObstacleIntervalMin +
+        (GAMEPLAY.productObstacleIntervalMax -
+          GAMEPLAY.productObstacleIntervalMin +
           1),
     )
   );
@@ -97,33 +114,68 @@ function intersects(
   );
 }
 
-function layoutStyle(
-  item: { left: number; top: number; width: number },
-): React.CSSProperties {
+function layoutStyle(item: {
+  left: number;
+  top: number;
+  width: number;
+  height?: number;
+}): CSSProperties {
   return {
     left: `${item.left * 100}%`,
     top: `${item.top * 100}%`,
     width: `${item.width * 100}%`,
+    ...(item.height === undefined
+      ? {}
+      : { height: `${item.height * 100}%`, objectFit: "cover" }),
   };
 }
 
 function getFloorY(layout: ResponsiveState) {
-  const authoredFloorRatio =
-    layout.orientation === "portrait"
-      ? GAMEPLAY.floorRatioPortrait
-      : GAMEPLAY.floorRatioLandscape;
-  const authoredPlatformHeight =
-    layout.logicalH * (1 - authoredFloorRatio);
-
-  return (
-    (layout.viewH - layout.offsetY) / layout.scale - authoredPlatformHeight
-  );
+  return ROAD_LAYOUT[layout.orientation].floor;
 }
 
-function getBallYOffset(portrait: boolean) {
-  return portrait
-    ? GAMEPLAY.ballYOffsetPortrait
-    : GAMEPLAY.ballYOffsetLandscape;
+function getBikeGeometry(layout: ResponsiveState) {
+  const width =
+    layout.orientation === "portrait"
+      ? GAMEPLAY.bikeWidthPortrait
+      : GAMEPLAY.bikeWidthLandscape;
+  const scale = width / BIKE_BASE_WIDTH;
+  const bodyHeight = BIKE_BASE_HEIGHT * scale;
+  const wheelSize = WHEEL_BASE_SIZE * scale;
+  const wheelY = WHEEL_BASE_Y * scale;
+
+  return {
+    width,
+    bodyHeight,
+    wheelSize,
+    wheelY,
+    rearWheelX: REAR_WHEEL_BASE_X * scale,
+    frontWheelX: FRONT_WHEEL_BASE_X * scale,
+    totalHeight: Math.max(bodyHeight, wheelY + wheelSize),
+  };
+}
+
+function getBikeX(layout: ResponsiveState) {
+  return layout.orientation === "portrait"
+    ? GAMEPLAY.bikeXPortrait
+    : GAMEPLAY.bikeXLandscape;
+}
+
+function getObstacleMetrics(layout: ResponsiveState, kind: 0 | 1) {
+  const portrait = layout.orientation === "portrait";
+  const width =
+    kind === 0
+      ? portrait
+        ? GAMEPLAY.coneWidthPortrait
+        : GAMEPLAY.coneWidthLandscape
+      : portrait
+        ? GAMEPLAY.manholeWidthPortrait
+        : GAMEPLAY.manholeWidthLandscape;
+  return { width, height: width / OBSTACLE_ASPECTS[kind] };
+}
+
+function getObstacleYShift(layout: ResponsiveState, kind: 0 | 1) {
+  return kind === 1 ? MANHOLE_POSITION[layout.viewportOrientation].y : 0;
 }
 
 function getCanvasMetrics(layout: ResponsiveState) {
@@ -133,15 +185,83 @@ function getCanvasMetrics(layout: ResponsiveState) {
   };
 }
 
-function getObstacleSpawnX(
-  layout: ResponsiveState,
-  obstacleWidth: number,
-  leadingWidth = obstacleWidth,
+function getViewportRightX(layout: ResponsiveState) {
+  return (layout.viewW - layout.offsetX) / layout.scale;
+}
+
+function getRandomObstacleGap() {
+  return (
+    GAMEPLAY.obstacleGapMin +
+    Math.random() * (GAMEPLAY.obstacleGapMax - GAMEPLAY.obstacleGapMin)
+  );
+}
+
+function getSpawnX(layout: ResponsiveState) {
+  return getViewportRightX(layout) + GAMEPLAY.obstacleSpawnMargin;
+}
+
+function addObstacle(world: World, layout: ResponsiveState, obstacleX: number) {
+  const portrait = layout.orientation === "portrait";
+  const kind = (Math.random() < 0.54 ? 0 : 1) as 0 | 1;
+  const obstacle = getObstacleMetrics(layout, kind);
+  const obstacleYShift = getObstacleYShift(layout, kind);
+  const floor = getFloorY(layout);
+
+  world.obstacles.push({
+    kind,
+    x: obstacleX,
+    width: obstacle.width,
+    height: obstacle.height,
+  });
+
+  world.obstaclesUntilProduct -= 1;
+  if (world.obstaclesUntilProduct <= 0) {
+    const productIndex = Math.floor(Math.random() * 3);
+    const productWidth = portrait
+      ? GAMEPLAY.productWidthPortrait
+      : GAMEPLAY.productWidthLandscape;
+    const productHeight = productWidth / PRODUCT_ASPECTS[productIndex];
+    const productLift =
+      layout.viewportOrientation === "portrait"
+        ? GAMEPLAY.productLiftPortrait
+        : GAMEPLAY.productLiftLandscape;
+    const onObstacle = Math.random() < 0.68;
+
+    world.collectibles.push({
+      productIndex,
+      x: onObstacle
+        ? obstacleX + obstacle.width / 2 - productWidth / 2
+        : obstacleX + obstacle.width + (portrait ? 220 : 270),
+      y: onObstacle
+        ? floor -
+          obstacle.height -
+          productHeight -
+          30 -
+          productLift +
+          obstacleYShift
+        : floor - productHeight - 30 - productLift,
+      width: productWidth,
+      height: productHeight,
+    });
+    world.obstaclesUntilProduct = randomProductInterval();
+  }
+
+  world.nextObstacleGap = getRandomObstacleGap();
+}
+
+function drawRotatedImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  size: number,
+  rotation: number,
 ) {
-  const viewportRightX =
-    (layout.viewW - layout.offsetX) / layout.scale;
-  const leadingOverhang = Math.max(0, (leadingWidth - obstacleWidth) / 2);
-  return viewportRightX + leadingOverhang;
+  context.save();
+  context.translate(x + size / 2, y + size / 2);
+  context.rotate(rotation);
+  context.drawImage(image, -size / 2, -size / 2, size, size);
+  context.restore();
 }
 
 export function GameScene({
@@ -158,9 +278,7 @@ export function GameScene({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLDivElement>(null);
   const [score, setScore] = useState(0);
-  const [mode, setMode] = useState<
-    "intro" | "running" | "crashed" | "complete"
-  >("intro");
+  const [mode, setMode] = useState<Mode>("intro");
   const callbackRef = useRef({
     onChallengeStart,
     onChallengeSolved,
@@ -178,33 +296,46 @@ export function GameScene({
 
   const images = useMemo(
     () => ({
-      ball: createImage(assets.ball),
+      bikeFrames: assets.bikeFrames.map(createImage),
+      wheel: createImage(assets.wheel),
       obstacles: assets.obstacles.map(createImage),
-      shirts: assets.shirts.map(createImage),
+      products: assets.products.map(createImage),
+      effects: createImage(assets.effects),
       poof: createImage(assets.poof),
+      road: createImage(assets.road),
     }),
     [],
   );
 
   const worldRef = useRef<World>({
-    running: false,
+    status: "intro",
     score: 0,
-    ballY: 0,
-    ballVelocity: 0,
-    ballRotation: 0,
+    bikeY: 0,
+    bikeVelocity: 0,
+    wheelRotation: 0,
+    frameClock: 0,
     obstacles: [],
     collectibles: [],
-    poofs: [],
-    shirtQueue: shuffledShirts(),
-    spawnDistance: 0,
-    obstaclesUntilShirt: randomShirtObstacleInterval(),
+    collectEffects: [],
+    poof: null,
+    roadOffset: 0,
+    spawnDistance: GAMEPLAY.firstObstacleOffset,
+    nextObstacleGap: GAMEPLAY.obstacleGapMin,
+    obstaclesUntilProduct: 0,
   });
-  const floorRef = useRef<number | null>(null);
-  const collisionLockedRef = useRef(false);
   const collisionResetTimerRef = useRef<number | null>(null);
   const layoutRef = useRef(layout);
   const pausedRef = useRef(paused);
   const interactiveRef = useRef(interactive);
+  const orientationRef = useRef(layout.orientation);
+  const horizontalLayoutRef = useRef({
+    viewW: layout.viewW,
+    viewH: layout.viewH,
+    offsetX: layout.offsetX,
+    scale: layout.scale,
+    orientation: layout.orientation,
+    viewportOrientation: layout.viewportOrientation,
+  });
   layoutRef.current = layout;
   pausedRef.current = paused;
   interactiveRef.current = interactive;
@@ -214,88 +345,134 @@ export function GameScene({
       window.clearTimeout(collisionResetTimerRef.current);
       collisionResetTimerRef.current = null;
     }
-    collisionLockedRef.current = false;
 
     const current = layoutRef.current;
-    const portrait = current.orientation === "portrait";
-    const floor = getFloorY(current);
-    const ballSize = portrait
-      ? GAMEPLAY.ballSizePortrait
-      : GAMEPLAY.ballSizeLandscape;
-    const ballYOffset = getBallYOffset(portrait);
-    floorRef.current = floor;
+    const bike = getBikeGeometry(current);
     worldRef.current = {
-      running: false,
+      status: "intro",
       score: 0,
-      ballY: floor - ballSize + ballYOffset,
-      ballVelocity: 0,
-      ballRotation: 0,
+      bikeY: getFloorY(current) - bike.totalHeight,
+      bikeVelocity: 0,
+      wheelRotation: 0,
+      frameClock: 0,
       obstacles: [],
       collectibles: [],
-      poofs: [],
-      shirtQueue: shuffledShirts(),
-      spawnDistance: 0,
-      obstaclesUntilShirt: randomShirtObstacleInterval(),
+      collectEffects: [],
+      poof: null,
+      roadOffset: 0,
+      spawnDistance: GAMEPLAY.firstObstacleOffset,
+      nextObstacleGap: getRandomObstacleGap(),
+      obstaclesUntilProduct: 0,
     };
     setScore(0);
     setMode("intro");
   };
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    resetWorld();
+    return () => {
       if (collisionResetTimerRef.current !== null) {
         window.clearTimeout(collisionResetTimerRef.current);
-        collisionResetTimerRef.current = null;
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
-    const nextFloor = getFloorY(layout);
-    const previousFloor = floorRef.current;
+    if (orientationRef.current === layout.orientation) return;
+    orientationRef.current = layout.orientation;
+    resetWorld();
+  }, [layout.orientation]);
 
-    if (previousFloor === null) {
-      resetWorld();
-      return;
-    }
+  useLayoutEffect(() => {
+    const previous = horizontalLayoutRef.current;
+    const current = layout;
+    const changed =
+      previous.viewW !== current.viewW ||
+      previous.viewH !== current.viewH ||
+      previous.offsetX !== current.offsetX ||
+      previous.scale !== current.scale ||
+      previous.orientation !== current.orientation ||
+      previous.viewportOrientation !== current.viewportOrientation;
 
-    floorRef.current = nextFloor;
-    const floorDelta = nextFloor - previousFloor;
-    const world = worldRef.current;
-    if (Math.abs(floorDelta) >= 0.01) {
-      world.ballY += floorDelta;
-      world.collectibles.forEach((collectible) => {
-        collectible.y += floorDelta;
-      });
-      world.poofs.forEach((poof) => {
-        poof.y += floorDelta;
-      });
-    }
-
-    const obstacleWidth =
-      layout.orientation === "portrait"
-        ? GAMEPLAY.obstacleWidthPortrait
-        : GAMEPLAY.obstacleWidthLandscape;
-    const nextSpawnX = getObstacleSpawnX(layout, obstacleWidth);
-    const rightmostObstacleX = world.obstacles.reduce(
-      (rightmost, obstacle) => Math.max(rightmost, obstacle.x),
-      Number.NEGATIVE_INFINITY,
-    );
-
-    if (Number.isFinite(rightmostObstacleX)) {
-      const safeRemainingDistance =
-        rightmostObstacleX + GAMEPLAY.obstacleGapMin - nextSpawnX;
-      world.spawnDistance = Math.max(
-        world.spawnDistance,
-        safeRemainingDistance,
+    if (changed && previous.scale > 0 && current.scale > 0) {
+      const scaleRatio = previous.scale / current.scale;
+      const previousBikeX =
+        (previous.orientation === "portrait"
+          ? GAMEPLAY.bikeXPortrait
+          : GAMEPLAY.bikeXLandscape) +
+        BIKE_POSITION[previous.viewportOrientation].x;
+      const previousBikeWidth =
+        previous.orientation === "portrait"
+          ? GAMEPLAY.bikeWidthPortrait
+          : GAMEPLAY.bikeWidthLandscape;
+      const currentBikeX =
+        getBikeX(current) + BIKE_POSITION[current.viewportOrientation].x;
+      const currentBikeWidth = getBikeGeometry(current).width;
+      const previousBikeFront = previousBikeX + previousBikeWidth;
+      const currentBikeFront = currentBikeX + currentBikeWidth;
+      const world = worldRef.current;
+      const nextObstacle = world.obstacles.reduce<Obstacle | null>(
+        (nearest, obstacle) =>
+          obstacle.x + obstacle.width >= previousBikeFront &&
+          (!nearest || obstacle.x < nearest.x)
+            ? obstacle
+            : nearest,
+        null,
       );
+
+      if (nextObstacle) {
+        const anchoredX =
+          currentBikeFront +
+          (nextObstacle.x - previousBikeFront) * scaleRatio;
+        const shiftX = anchoredX - nextObstacle.x;
+
+        world.obstacles.forEach((obstacle) => {
+          obstacle.x += shiftX;
+        });
+        world.collectibles.forEach((collectible) => {
+          collectible.x += shiftX;
+        });
+        if (world.poof) world.poof.x += shiftX;
+      }
+
+      if (world.status === "running") {
+        const spawnBoundary = getSpawnX(current);
+        let latestObstacle = world.obstacles.reduce<Obstacle | null>(
+          (latest, obstacle) =>
+            !latest || obstacle.x > latest.x ? obstacle : latest,
+          null,
+        );
+        let nextSpawnX = latestObstacle
+          ? latestObstacle.x + world.nextObstacleGap
+          : spawnBoundary;
+        let fillCount = 0;
+
+        // A landscape viewport exposes world space that was outside the prior
+        // portrait view. Fill that continuation before paint so later objects
+        // never pop into an already-visible area after repeated rotations.
+        while (latestObstacle && nextSpawnX <= spawnBoundary && fillCount < 8) {
+          addObstacle(world, current, nextSpawnX);
+          latestObstacle = world.obstacles[world.obstacles.length - 1];
+          nextSpawnX = latestObstacle.x + world.nextObstacleGap;
+          fillCount += 1;
+        }
+
+        world.spawnDistance = latestObstacle
+          ? Math.max(0, nextSpawnX - spawnBoundary)
+          : world.spawnDistance;
+      }
     }
+
+    horizontalLayoutRef.current = {
+      viewW: current.viewW,
+      viewH: current.viewH,
+      offsetX: current.offsetX,
+      scale: current.scale,
+      orientation: current.orientation,
+      viewportOrientation: current.viewportOrientation,
+    };
   }, [
-    layout.logicalH,
-    layout.logicalW,
     layout.offsetX,
-    layout.offsetY,
     layout.orientation,
     layout.scale,
     layout.viewH,
@@ -307,9 +484,7 @@ export function GameScene({
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = Math.round(layout.viewW * layout.dpr);
-    canvas.height = Math.round(
-      layout.logicalH * layout.scale * layout.dpr,
-    );
+    canvas.height = Math.round(layout.logicalH * layout.scale * layout.dpr);
   }, [layout.dpr, layout.logicalH, layout.scale, layout.viewW]);
 
   useEffect(() => {
@@ -331,47 +506,36 @@ export function GameScene({
       navigator.maxTouchPoints > 0;
 
     const activate = (event: Event, interactionId: number) => {
-      if (
-        !interactiveRef.current ||
-        pausedRef.current ||
-        collisionLockedRef.current
-      ) {
+      if (!interactiveRef.current || pausedRef.current) return false;
+      const world = worldRef.current;
+      if (world.status === "crashed" || world.status === "complete") {
         return false;
       }
+
       event.preventDefault();
       const current = layoutRef.current;
-      const portrait = current.orientation === "portrait";
-      const floor = getFloorY(current);
-      const ballSize = portrait
-        ? GAMEPLAY.ballSizePortrait
-        : GAMEPLAY.ballSizeLandscape;
-      const restingBallY = floor - ballSize + getBallYOffset(portrait);
-      const world = worldRef.current;
-      const startsGame = !world.running && world.score < 6;
+      const bike = getBikeGeometry(current);
+      const restingBikeY = getFloorY(current) - bike.totalHeight;
+      const onGround = world.bikeY >= restingBikeY - 2;
 
-      if (!world.running && !startsGame) return false;
-
-      const onGround = world.ballY >= restingBallY - 2;
-      if (onGround) callbackRef.current.sounds.stopRolling();
       callbackRef.current.sounds.beginGameplayGesture({
         interactionId,
         jump: onGround,
       });
 
-      if (!world.running) {
-        world.running = true;
-        world.obstacles = [];
-        world.collectibles = [];
-        world.spawnDistance = 0;
+      if (world.status === "intro") {
+        world.status = "running";
+        world.spawnDistance = GAMEPLAY.firstObstacleOffset;
+        world.nextObstacleGap = getRandomObstacleGap();
         setMode("running");
         callbackRef.current.onChallengeStart();
       }
 
       if (onGround) {
-        world.ballY = restingBallY;
-        world.ballVelocity =
+        world.bikeY = restingBikeY;
+        world.bikeVelocity =
           GAMEPLAY.jumpVelocity *
-          (current.viewportOrientation === "landscape"
+          (current.orientation === "landscape"
             ? GAMEPLAY.landscapeJumpVelocityMultiplier
             : 1);
       }
@@ -381,20 +545,18 @@ export function GameScene({
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (activePointerId !== null) return;
-      const interactionId = nextInteractionId;
-      nextInteractionId += 1;
+      const interactionId = nextInteractionId++;
       if (!activate(event, interactionId)) return;
       activePointerId = event.pointerId;
       activeInteractionId = interactionId;
     };
     const onPointerMove = (event: PointerEvent) => {
       if (
-        event.pointerId !== activePointerId ||
-        activeInteractionId === null
+        event.pointerId === activePointerId &&
+        activeInteractionId !== null
       ) {
-        return;
+        callbackRef.current.sounds.retryGameplayGesture(activeInteractionId);
       }
-      callbackRef.current.sounds.retryGameplayGesture(activeInteractionId);
     };
     const onPointerUp = (event: PointerEvent) => {
       if (
@@ -421,8 +583,7 @@ export function GameScene({
     const onTouchStart = (event: TouchEvent) => {
       if (activeTouchId !== null || event.changedTouches.length === 0) return;
       const touch = event.changedTouches[0];
-      const interactionId = nextInteractionId;
-      nextInteractionId += 1;
+      const interactionId = nextInteractionId++;
       if (!activate(event, interactionId)) return;
       activeTouchId = touch.identifier;
       activeInteractionId = interactionId;
@@ -477,7 +638,6 @@ export function GameScene({
     };
 
     window.addEventListener("blur", onWindowBlur);
-
     if (useTouchEvents) {
       input.addEventListener("touchstart", onTouchStart, {
         capture: true,
@@ -513,12 +673,8 @@ export function GameScene({
       };
     }
 
-    input.addEventListener("pointerdown", onPointerDown, {
-      capture: true,
-    });
-    window.addEventListener("pointermove", onPointerMove, {
-      capture: true,
-    });
+    input.addEventListener("pointerdown", onPointerDown, { capture: true });
+    window.addEventListener("pointermove", onPointerMove, { capture: true });
     window.addEventListener("pointerup", onPointerUp, { capture: true });
     window.addEventListener("pointercancel", onPointerCancel, {
       capture: true,
@@ -532,9 +688,7 @@ export function GameScene({
       window.removeEventListener("pointermove", onPointerMove, {
         capture: true,
       });
-      window.removeEventListener("pointerup", onPointerUp, {
-        capture: true,
-      });
+      window.removeEventListener("pointerup", onPointerUp, { capture: true });
       window.removeEventListener("pointercancel", onPointerCancel, {
         capture: true,
       });
@@ -554,43 +708,34 @@ export function GameScene({
       const current = layoutRef.current;
       const world = worldRef.current;
       const portrait = current.orientation === "portrait";
-      const height = current.logicalH;
-      const { bleedLeft } = getCanvasMetrics(current);
+      const { bleedLeft, logicalWidth } = getCanvasMetrics(current);
       const viewportLeftX = -bleedLeft;
       const floor = getFloorY(current);
-      const ballSize = portrait
-        ? GAMEPLAY.ballSizePortrait
-        : GAMEPLAY.ballSizeLandscape;
-      const restingBallY = floor - ballSize + getBallYOffset(portrait);
-      const ballX = portrait
-        ? GAMEPLAY.ballXPortrait
-        : GAMEPLAY.ballXLandscape;
-      const obstacleWidth = portrait
-        ? GAMEPLAY.obstacleWidthPortrait
-        : GAMEPLAY.obstacleWidthLandscape;
-      const shirtWidth = portrait
-        ? GAMEPLAY.shirtWidthPortrait
-        : GAMEPLAY.shirtWidthLandscape;
-      const shirtHeight = shirtWidth * 1.1;
-      const speed = portrait
-        ? GAMEPLAY.obstacleSpeed
-        : GAMEPLAY.obstacleSpeed * 1.28;
+      const bike = getBikeGeometry(current);
+      const bikeX = getBikeX(current);
+      const bikePosition = BIKE_POSITION[current.viewportOrientation];
+      const bikeDrawX = bikeX + bikePosition.x;
+      const bikeDrawY = world.bikeY + bikePosition.y;
+      const restingBikeY = floor - bike.totalHeight;
+      const speed =
+        GAMEPLAY.obstacleSpeed *
+        (portrait ? 1 : GAMEPLAY.landscapeSpeedMultiplier);
       const delta = Math.min(0.034, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
 
-      if (world.running && !pausedRef.current) {
-        const wasAirborne =
-          world.ballY < restingBallY - 2 || world.ballVelocity !== 0;
-        world.ballVelocity += GAMEPLAY.gravity * delta;
-        world.ballY += world.ballVelocity * delta;
-        world.ballRotation += delta * 3.8;
-        if (world.ballY >= restingBallY) {
-          world.ballY = restingBallY;
-          world.ballVelocity = 0;
-          if (wasAirborne) callbackRef.current.sounds.playRolling();
+      if (world.status === "running" && !pausedRef.current) {
+        world.bikeVelocity += GAMEPLAY.gravity * delta;
+        world.bikeY += world.bikeVelocity * delta;
+        world.wheelRotation += delta * 9.5;
+        world.frameClock += delta;
+        if (world.bikeY >= restingBikeY) {
+          world.bikeY = restingBikeY;
+          world.bikeVelocity = 0;
         }
 
         const travel = speed * delta;
+        const roadTileWidth = ROAD_LAYOUT[current.orientation].height * ROAD_ASPECT;
+        world.roadOffset = (world.roadOffset + travel) % roadTileWidth;
         world.spawnDistance -= travel;
         world.obstacles.forEach((obstacle) => {
           obstacle.x -= travel;
@@ -598,103 +743,66 @@ export function GameScene({
         world.collectibles.forEach((collectible) => {
           collectible.x -= travel;
         });
-        world.poofs.forEach((poof) => {
-          poof.x -= travel;
-          poof.age += delta;
-        });
+        world.collectEffects = world.collectEffects
+          .map((age) => age + delta)
+          .filter((age) => age < GAMEPLAY.collectEffectDurationSeconds);
 
         if (world.spawnDistance <= 0) {
-          const imageIndex =
-            SPAWNABLE_OBSTACLE_INDICES[
-              Math.floor(Math.random() * SPAWNABLE_OBSTACLE_INDICES.length)
-            ];
-          const heightScale =
-            (portrait ? 1 : 0.78) *
-            (current.viewportOrientation === "landscape"
-              ? GAMEPLAY.landscapeObstacleHeightMultiplier
-              : 1);
-          const obstacleHeight = OBSTACLE_HEIGHTS[imageIndex] * heightScale;
-
-          world.obstaclesUntilShirt -= 1;
-          const shouldSpawnShirt =
-            world.obstaclesUntilShirt <= 0 && world.shirtQueue.length > 0;
-          const shirtIndex = shouldSpawnShirt
-            ? world.shirtQueue.shift()
-            : undefined;
-          const onObstacle =
-            typeof shirtIndex === "number" && Math.random() > 0.42;
-          const obstacleX = getObstacleSpawnX(
-            current,
-            obstacleWidth,
-            onObstacle ? shirtWidth : obstacleWidth,
+          const latestObstacle = world.obstacles.reduce<Obstacle | null>(
+            (latest, candidate) =>
+              !latest || candidate.x > latest.x ? candidate : latest,
+            null,
           );
-          world.obstacles.push({
-            x: obstacleX,
-            width: obstacleWidth,
-            height: obstacleHeight,
-            imageIndex,
-          });
-
-          if (typeof shirtIndex === "number") {
-            world.collectibles.push({
-              shirtIndex,
-              x: onObstacle
-                ? obstacleX + obstacleWidth / 2 - shirtWidth / 2
-                : obstacleX + 300,
-              y: onObstacle
-                ? floor - obstacleHeight - shirtHeight - 34
-                : floor - shirtHeight - 44,
-              width: shirtWidth,
-              height: shirtHeight,
-            });
-            world.obstaclesUntilShirt = randomShirtObstacleInterval();
-          }
-
-          world.spawnDistance =
-            GAMEPLAY.obstacleGapMin +
-            Math.random() *
-              (GAMEPLAY.obstacleGapMax - GAMEPLAY.obstacleGapMin);
+          const spawnBoundary = getSpawnX(current);
+          const obstacleX = latestObstacle
+            ? Math.max(
+                latestObstacle.x + world.nextObstacleGap,
+                spawnBoundary,
+              )
+            : spawnBoundary;
+          addObstacle(world, current, obstacleX);
+          world.spawnDistance = world.nextObstacleGap;
         }
 
-        const ballCollisionHitbox = {
-          x: ballX + ballSize * GAMEPLAY.collisionBallInsetXRatio,
-          y: world.ballY + ballSize * GAMEPLAY.collisionBallInsetYRatio,
-          width: ballSize * (1 - GAMEPLAY.collisionBallInsetXRatio * 2),
-          height: ballSize * (1 - GAMEPLAY.collisionBallInsetYRatio * 2),
+        const bikeCollisionHitbox = {
+          x: bikeDrawX + bike.width * 0.1,
+          y: bikeDrawY + bike.totalHeight * 0.22,
+          width: bike.width * 0.78,
+          height: bike.totalHeight * 0.76,
         };
-        const ballCollectionHitbox = {
-          x: ballX + ballSize * 0.2,
-          y: world.ballY + ballSize * 0.17,
-          width: ballSize * 0.6,
-          height: ballSize * 0.68,
+        const bikeCollectionHitbox = {
+          x: bikeDrawX + bike.width * 0.05,
+          y: bikeDrawY + bike.totalHeight * 0.02,
+          width: bike.width * 0.9,
+          height: bike.totalHeight * 0.94,
         };
 
-        const hitObstacle = world.obstacles.some((obstacle) =>
-          intersects(ballCollisionHitbox, {
-            x:
-              obstacle.x +
-              obstacle.width * GAMEPLAY.collisionObstacleInsetXRatio,
+        const hitObstacle = world.obstacles.find((obstacle) => {
+          const manhole = obstacle.kind === 1;
+          const yShift = getObstacleYShift(current, obstacle.kind);
+          const insetX = manhole ? 0.08 : 0.22;
+          const topInset = manhole ? 0.58 : 0.08;
+          return intersects(bikeCollisionHitbox, {
+            x: obstacle.x + obstacle.width * insetX,
             y:
               floor -
               obstacle.height +
-              obstacle.height * GAMEPLAY.collisionObstacleTopInsetRatio,
-            width:
-              obstacle.width *
-              (1 - GAMEPLAY.collisionObstacleInsetXRatio * 2),
-            height:
-              obstacle.height *
-              (1 - GAMEPLAY.collisionObstacleTopInsetRatio),
-          }),
-        );
+              obstacle.height * topInset +
+              yShift,
+            width: obstacle.width * (1 - insetX * 2),
+            height: obstacle.height * (1 - topInset),
+          });
+        });
 
         if (hitObstacle) {
-          world.running = false;
+          world.status = "crashed";
+          world.poof = {
+            x: bikeDrawX + bike.width * 0.82,
+            y: floor - (portrait ? 112 : 94),
+            age: 0,
+          };
           callbackRef.current.onCollision();
-          collisionLockedRef.current = true;
           setMode("crashed");
-          if (collisionResetTimerRef.current !== null) {
-            window.clearTimeout(collisionResetTimerRef.current);
-          }
           collisionResetTimerRef.current = window.setTimeout(() => {
             collisionResetTimerRef.current = null;
             resetWorld();
@@ -702,33 +810,25 @@ export function GameScene({
         } else {
           const retained: Collectible[] = [];
           for (const collectible of world.collectibles) {
-            const collected = intersects(ballCollectionHitbox, {
-              x: collectible.x + collectible.width * 0.17,
-              y: collectible.y + collectible.height * 0.12,
-              width: collectible.width * 0.66,
-              height: collectible.height * 0.76,
+            const collected = intersects(bikeCollectionHitbox, {
+              x: collectible.x + collectible.width * 0.12,
+              y: collectible.y + collectible.height * 0.08,
+              width: collectible.width * 0.76,
+              height: collectible.height * 0.84,
             });
 
             if (collected) {
-              world.poofs.push({
-                x: collectible.x + collectible.width / 2,
-                y: collectible.y + collectible.height / 2,
-                age: 0,
-              });
+              world.collectEffects.push(0);
               callbackRef.current.onCollect();
               world.score += 1;
               setScore(world.score);
-              if (world.score === 6) {
-                world.running = false;
+              if (world.score >= GAMEPLAY.targetScore) {
+                world.status = "complete";
                 setMode("complete");
                 callbackRef.current.onChallengeSolved();
                 break;
               }
-            } else if (
-              collectible.x + collectible.width < viewportLeftX
-            ) {
-              world.shirtQueue.push(collectible.shirtIndex);
-            } else {
+            } else if (collectible.x + collectible.width >= viewportLeftX) {
               retained.push(collectible);
             }
           }
@@ -736,11 +836,11 @@ export function GameScene({
         }
 
         world.obstacles = world.obstacles.filter(
-          (obstacle) =>
-            obstacle.x + obstacle.width >= viewportLeftX,
+          (obstacle) => obstacle.x + obstacle.width >= viewportLeftX,
         );
-        world.poofs = world.poofs.filter((poof) => poof.age < 0.48);
       }
+
+      if (world.poof && !pausedRef.current) world.poof.age += delta;
 
       const renderScale = current.scale * current.dpr;
       context.setTransform(1, 0, 0, 1, 0, 0);
@@ -754,50 +854,110 @@ export function GameScene({
         0,
       );
 
-      world.obstacles.forEach((obstacle) => {
+      const road = ROAD_LAYOUT[current.orientation];
+      const roadTileWidth = road.height * ROAD_ASPECT;
+      const roadStartX = viewportLeftX - world.roadOffset - roadTileWidth;
+      const viewportRightX = viewportLeftX + logicalWidth;
+      for (
+        let roadX = roadStartX;
+        roadX < viewportRightX + roadTileWidth;
+        roadX += roadTileWidth
+      ) {
         context.drawImage(
-          images.obstacles[obstacle.imageIndex],
+          images.road,
+          roadX,
+          road.top,
+          roadTileWidth,
+          road.height,
+        );
+      }
+
+      world.obstacles.forEach((obstacle) => {
+        const yShift = getObstacleYShift(current, obstacle.kind);
+        context.drawImage(
+          images.obstacles[obstacle.kind],
           obstacle.x,
-          floor - obstacle.height,
+          floor - obstacle.height + yShift,
           obstacle.width,
           obstacle.height,
         );
       });
       world.collectibles.forEach((collectible) => {
         context.drawImage(
-          images.shirts[collectible.shirtIndex],
+          images.products[collectible.productIndex],
           collectible.x,
           collectible.y,
           collectible.width,
           collectible.height,
         );
       });
-      world.poofs.forEach((poof) => {
-        const progress = poof.age / 0.48;
-        const size = (portrait ? 240 : 190) * (0.72 + progress * 0.4);
+
+      world.collectEffects.forEach((age) => {
+        const progress = age / GAMEPLAY.collectEffectDurationSeconds;
+        const width = (portrait ? 500 : 420) * (0.8 + progress * 0.28);
+        const height = width * (559 / 486);
         context.save();
-        context.globalAlpha = Math.max(0, 1 - progress);
+        context.globalAlpha = Math.max(0, 1 - progress * 0.72);
         context.drawImage(
-          images.poof,
-          poof.x - size / 2,
-          poof.y - size / 2,
-          size,
-          size * 0.75,
+          images.effects,
+          bikeDrawX + bike.width / 2 - width / 2,
+          bikeDrawY + bike.totalHeight / 2 - height / 2,
+          width,
+          height,
         );
         context.restore();
       });
 
-      context.save();
-      context.translate(ballX + ballSize / 2, world.ballY + ballSize / 2);
-      context.rotate(world.ballRotation);
-      context.drawImage(
-        images.ball,
-        -ballSize / 2,
-        -ballSize / 2,
-        ballSize,
-        ballSize,
+      const rearWheelPosition =
+        BIKE_WHEEL_POSITION.rear[current.viewportOrientation];
+      const frontWheelPosition =
+        BIKE_WHEEL_POSITION.front[current.viewportOrientation];
+      drawRotatedImage(
+        context,
+        images.wheel,
+        bikeDrawX + bike.rearWheelX + rearWheelPosition.x,
+        bikeDrawY + bike.wheelY + rearWheelPosition.y,
+        bike.wheelSize,
+        world.wheelRotation,
       );
-      context.restore();
+      drawRotatedImage(
+        context,
+        images.wheel,
+        bikeDrawX + bike.frontWheelX + frontWheelPosition.x,
+        bikeDrawY + bike.wheelY + frontWheelPosition.y,
+        bike.wheelSize,
+        world.wheelRotation,
+      );
+      const frameIndex =
+        world.status === "running"
+          ? Math.floor(
+              world.frameClock / BIKE_FRAME_TIMING.runningSecondsPerFrame,
+            ) % 2
+          : 0;
+      const framePosition =
+        BIKE_FRAME_ALIGNMENT[frameIndex === 0 ? "frame1" : "frame2"][
+          current.viewportOrientation
+        ];
+      context.drawImage(
+        images.bikeFrames[frameIndex],
+        bikeDrawX + framePosition.x,
+        bikeDrawY + framePosition.y,
+        bike.width,
+        bike.bodyHeight,
+      );
+
+      if (world.poof) {
+        const pulse = 1 + Math.min(world.poof.age, 0.2) * 0.7;
+        const width = (portrait ? 250 : 205) * pulse;
+        const height = width * (173 / 231);
+        context.drawImage(
+          images.poof,
+          world.poof.x - width / 2,
+          world.poof.y - height / 2,
+          width,
+          height,
+        );
+      }
 
       animationFrame = window.requestAnimationFrame(draw);
     };
@@ -806,13 +966,43 @@ export function GameScene({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [images]);
 
-  const authored = LAYOUT["logo"][layout.orientation];
-  const scoreLayout = LAYOUT.score[layout.orientation];
-  const scoreTextPosition = SCORE_TEXT_POSITION[layout.orientation];
-  const tapLayout = LAYOUT.tap[layout.orientation];
-  const handLayout = LAYOUT.hand[layout.orientation];
-  const ctaLayout = LAYOUT.cta[layout.orientation];
+  const authored = {
+    logo: LAYOUT.logo[layout.orientation],
+    collectTitle: LAYOUT.collectTitle[layout.orientation],
+    collectInstruction: LAYOUT.collectInstruction[layout.orientation],
+    score: LAYOUT.score[layout.orientation],
+    tap: LAYOUT.tap[layout.orientation],
+    tutorialHand: LAYOUT.tutorialHand[layout.orientation],
+    cta: LAYOUT.cta[layout.orientation],
+  };
   const canvasMetrics = getCanvasMetrics(layout);
+  const tapBannerHeight =
+    layout.logicalW *
+    authored.tap.width *
+    (TAP_BANNER_SIZE.height / TAP_BANNER_SIZE.width);
+  const tapBannerStyle =
+    layout.viewportOrientation === "landscape"
+      ? {
+          left: `${-layout.offsetX / layout.scale}px`,
+          top: `${authored.tap.top * 100}%`,
+          width: `${layout.viewW / layout.scale}px`,
+          height: `${tapBannerHeight}px`,
+          objectFit: "fill" as const,
+        }
+      : layoutStyle(authored.tap);
+  const tapTextSize =
+    mode === "crashed"
+      ? TAP_BANNER_TEXT_SIZE.tryAgain
+      : TAP_BANNER_TEXT_SIZE.tapToStart;
+  const tapBannerTextStyle = {
+    left: `${(layout.logicalW - tapTextSize.width) / 2}px`,
+    top: `${
+      authored.tap.top * layout.logicalH +
+      (tapBannerHeight - tapTextSize.height) / 2
+    }px`,
+    width: `${tapTextSize.width}px`,
+    height: `${tapTextSize.height}px`,
+  } as const;
   const inputStyle = {
     left: `${-layout.offsetX / layout.scale}px`,
     top: `${-layout.offsetY / layout.scale}px`,
@@ -820,6 +1010,7 @@ export function GameScene({
     height: `${layout.viewH / layout.scale}px`,
     pointerEvents: interactive ? "auto" : "none",
   } as const;
+  const scoreLabel = `${score} ${score <= 1 ? "Point" : "Points"}`;
 
   return (
     <>
@@ -835,36 +1026,53 @@ export function GameScene({
       <img
         className="hud-logo"
         src={assets.logo}
-        alt="Fresh Clean Tees"
-        style={layoutStyle(authored)}
+        alt="Histrips"
+        style={layoutStyle(authored.logo)}
       />
-      <div className="scoreboard" style={layoutStyle(scoreLayout)}>
-        <img src={assets.scoreboard} alt="" />
-        <span
-          style={{
-            left: `calc(46.5% + ${scoreTextPosition.x}px)`,
-            top: `calc(50% + ${scoreTextPosition.y}px)`,
-          }}
-        >
-          {score} out of 6
-        </span>
+      <img
+        className="collect-title"
+        src={assets.collectTitle}
+        alt="Collect for Reveal"
+        style={layoutStyle(authored.collectTitle)}
+      />
+      <img
+        className="collect-instruction"
+        src={assets.collectInstruction}
+        alt="Collect at least 5 Products"
+        style={layoutStyle(authored.collectInstruction)}
+      />
+      <div className="score-text" style={layoutStyle(authored.score)}>
+        {scoreLabel}
       </div>
       <div
-        className={`tutorial ${mode === "intro" ? "tutorial--visible" : ""}`}
-        aria-hidden={mode !== "intro"}
+        className={`tutorial ${
+          mode === "intro" || mode === "crashed" ? "tutorial--visible" : ""
+        }`}
+        aria-hidden={mode !== "intro" && mode !== "crashed"}
       >
         <img
-          className="tap-to-start"
-          src={assets.tapToStart}
-          alt="Tap to start"
-          style={layoutStyle(tapLayout)}
+          className="tap-banner-background"
+          src={assets.tapBannerBackground}
+          alt=""
+          draggable={false}
+          style={tapBannerStyle}
         />
         <img
-          className="tutorial-hand"
-          src={assets.tutorialHand}
-          alt=""
-          style={layoutStyle(handLayout)}
+          className="tap-banner-text"
+          src={mode === "crashed" ? assets.tryAgainText : assets.tapToStartText}
+          alt={mode === "crashed" ? "Try Again" : "Tap to Start"}
+          draggable={false}
+          style={tapBannerTextStyle}
         />
+        {mode === "intro" && (
+          <img
+            className="tutorial-hand"
+            src={assets.hand}
+            alt=""
+            draggable={false}
+            style={layoutStyle(authored.tutorialHand)}
+          />
+        )}
       </div>
       <div
         ref={inputRef}
@@ -876,7 +1084,7 @@ export function GameScene({
       {interactive && (
         <button
           className="game-cta"
-          style={layoutStyle(ctaLayout)}
+          style={layoutStyle(authored.cta)}
           onClick={onCta}
           aria-label="Shop now"
         >
