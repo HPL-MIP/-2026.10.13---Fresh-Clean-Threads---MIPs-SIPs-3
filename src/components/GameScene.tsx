@@ -525,7 +525,6 @@ export function GameScene({
       const restingBikeY = getFloorY(current) - bike.totalHeight;
       const onGround = world.bikeY >= restingBikeY - 2;
 
-      if (onGround) callbackRef.current.sounds.stopRolling();
       callbackRef.current.sounds.beginGameplayGesture({
         interactionId,
         jump: onGround,

@@ -240,7 +240,7 @@ class PlayableAudioManager {
   }
 
   private primeFutureVoices() {
-    (["rolling", "jump", "fail", "collect", "completion"] as const).forEach((name) => {
+    (["jump", "fail", "collect", "completion"] as const).forEach((name) => {
       this.pools[name].voices.forEach((voice) =>
         this.primeVoice(this.pools[name], voice),
       );
@@ -416,6 +416,10 @@ class PlayableAudioManager {
     this.activeInteractions.add(interactionId);
 
     if (jump) this.requestCue("jump", interactionId);
+    // Rolling is a long-lived gameplay loop. Request its pre-created voice
+    // directly in every accepted native gesture so iOS can start or retry the
+    // exact same element while the interaction is still trusted.
+    this.requestCue("rolling", interactionId);
 
     Object.values(this.pools).forEach((pool) => {
       pool.voices.forEach((voice) => {
