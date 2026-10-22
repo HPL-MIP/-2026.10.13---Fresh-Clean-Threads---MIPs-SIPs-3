@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-declare module "virtual:histrips-sample-endcard" {
+declare module "virtual:histrips-endcard" {
   const html: string;
   export default html;
 }

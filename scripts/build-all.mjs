@@ -1,5 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createSanitizedEndcardHtml, getEndcardVideoUrls, suppliedEndcardPath } from "./endcard.mjs";
 
 const root = process.cwd();
 const outputPath = resolve(root, "dist/index.html");
@@ -7,10 +8,6 @@ const deliveryName =
   "histrips_acslanot_mip_20261016_03_ecomm_game_unknown_human_none_none.html";
 const deliveryPath = resolve(root, "dist", deliveryName);
 const maxBytes = 5_000_000;
-const suppliedEndcardPath = resolve(
-  root,
-  "Assets/Histrips Assets/sample_endcard.html",
-);
 
 function fail(message) {
   throw new Error(`[AppLovin build] ${message}`);
@@ -173,26 +170,39 @@ for (const mergedSource of [
   }
 }
 
-const suppliedEndcard = readFileSync(suppliedEndcardPath, "utf8");
-const suppliedVideoPayloads = [
-  ...suppliedEndcard.matchAll(/data:video\/[^;]+;base64,([A-Za-z0-9+/=]+)/g),
-].map((match) => match[1]);
+const suppliedEndcard = readFileSync(resolve(root, suppliedEndcardPath), "utf8");
+const transformedEndcard = createSanitizedEndcardHtml(suppliedEndcard);
+const embeddedEndcards = [
+  ...html.matchAll(/data:text\/html;base64,([A-Za-z0-9+/=]+)/g),
+];
+if (embeddedEndcards.length !== 1) {
+  fail(`Expected one embedded endcard HTML, found ${embeddedEndcards.length}.`);
+}
+const endcardBytes = Buffer.from(embeddedEndcards[0][1], "base64");
+if (!endcardBytes.equals(Buffer.from(transformedEndcard))) {
+  fail("Embedded endcard HTML does not match the transformed supplied source.");
+}
+if (/mraid|handleClickAction|signalPlayableLifecycle/.test(transformedEndcard)) {
+  fail("The embedded endcard duplicates top-level SDK integration.");
+}
+const suppliedVideoPayloads = getEndcardVideoUrls(suppliedEndcard).map((url) => url.split(",")[1]);
 if (suppliedVideoPayloads.length !== 2) {
   fail(
-    `Expected two video payloads in sample_endcard.html, found ${suppliedVideoPayloads.length}.`,
+    `Expected two video payloads in supplied endcard HTML, found ${suppliedVideoPayloads.length}.`,
   );
 }
 for (const payload of new Set(suppliedVideoPayloads)) {
-  if (!html.includes(payload)) {
-    fail("A supplied sample_endcard.html video payload is missing from the build.");
+  if (!transformedEndcard.includes(payload)) {
+    fail("A supplied endcard video payload is missing from the build.");
   }
 }
-if (!html.includes("histrips:endcard-media")) {
+if (!transformedEndcard.includes("histrips:endcard-media")) {
   fail("The parent-controlled temporary endcard lifecycle channel is missing.");
 }
 
 const inlineScripts = [
   ...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi),
+  ...transformedEndcard.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi),
 ];
 for (const [index, match] of inlineScripts.entries()) {
   if (!match[1].trim()) continue;

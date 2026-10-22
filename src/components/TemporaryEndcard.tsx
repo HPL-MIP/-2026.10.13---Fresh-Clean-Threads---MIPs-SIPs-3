@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import endcardHtml from "virtual:histrips-sample-endcard";
+import endcardUrl from "virtual:histrips-endcard";
 import { Z_INDEX } from "../constants";
 
 type TemporaryEndcardProps = {
@@ -56,7 +56,7 @@ export function TemporaryEndcard({
       <iframe
         ref={iframeRef}
         className="temporary-endcard__frame"
-        srcDoc={endcardHtml}
+        src={endcardUrl}
         title="Histrips offer"
         sandbox="allow-scripts"
         allow="autoplay"
